@@ -186,7 +186,7 @@ const modeloValeNoDia = (m, iso) => (!m.dias || !m.dias.length) ? true : m.dias.
 /* ---------- Firebase ---------- */
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -326,6 +326,16 @@ async function getUsuarios(){
 }
 
 function pctInst(c){ const n=c.itens.length||1; return Math.round(c.itens.filter(i=>i.done).length/n*100); }
+/* janela de edição: diário/avulso até 08h do dia seguinte; semanal até segunda 08h */
+function limiteEdicao(freq,periodo){
+  const base = freq==="semanal" ? addDias(periodo,7) : addDias(periodo,1);
+  return new Date(base+"T08:00:00");
+}
+function podeEditar(x){
+  if(me && me.papel!=="funcionario") return true;
+  const lim = (x.editavelAte && x.editavelAte.toDate) ? x.editavelAte.toDate() : limiteEdicao(x.freq,x.periodo);
+  return new Date() < lim;
+}
 function periodoEncerrado(c){
   const hoje=hojeISO();
   if(c.freq==="semanal") return semanaKey(new Date()) > c.periodo;
@@ -358,6 +368,7 @@ async function gerarMinhasInstancias(){
         modeloId:m.id, nome:m.nome, setor:m.setor, freq:m.freq,
         funcionarioUid:me.uid, funcionarioNome:me.nome,
         periodo, limite:m.limite||"", concluidoEm:null, obs:"",
+        editavelAte: Timestamp.fromDate(limiteEdicao(m.freq,periodo)),
         itens: (m.itens||[]).map(i=>({id:i.id, t:i.t, desc:i.desc||"", done:false, doneEm:null, nc:null})),
         criadoEm: serverTimestamp()
       });
@@ -404,6 +415,7 @@ async function abrirExec(id){
 function renderExec(){
   const x=execRef, c=$("tab-content");
   const p=pctInst(x), faltam=x.itens.filter(i=>!i.done).length;
+  const travado = !podeEditar(x);
   c.innerHTML=`
     <button class="back" id="ex-back">← Voltar</button>
     <div class="eyebrow">${esc(x.setor)}</div>
@@ -411,27 +423,28 @@ function renderExec(){
     <p class="sub">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBRfull(x.periodo):esc(x.limite||"hoje"))} · marque cada item conforme for fazendo</p>
     <div class="bar"><i style="width:${p}%"></i></div>
     <div style="margin-top:8px">
+      ${travado?`<div class="readonly" style="margin-top:14px">🔒 Encerrado — esse checklist fechou e não pode mais ser alterado. O que ficou em aberto conta como não feito.</div>`:""}
       ${x.itens.map((i,ix)=>`
         <div class="item ${i.done?'done':''}">
-          <div class="chk ${i.done?'on':''}" data-tog="${ix}"></div>
+          <div class="chk ${i.done?'on':''}" ${travado?'':`data-tog="${ix}"`} ${travado?'style="cursor:default;opacity:.55"':''}></div>
           <div class="txt"><b>${esc(i.t)}</b>${i.desc?`<small>${esc(i.desc)}</small>`:""}${i.done&&i.doneEm?`<small>✓ ${esc(i.doneEm)}</small>`:""}</div>
-          <button class="probbtn ${i.nc?'on':''}" data-nc="${ix}">${i.nc?'⚠ Problema':'Relatar'}</button>
+          ${travado?"":`<button class="probbtn ${i.nc?'on':''}" data-nc="${ix}">${i.nc?'⚠ Problema':'Relatar'}</button>`}
         </div>
         ${i.nc?`<div class="ncnote">⚠ ${esc(i.nc)}</div>`:""}
       `).join("")}
     </div>
-    <div class="fld" style="margin-top:18px"><label>Observações do dia (opcional)</label>
-      <textarea id="ex-obs" placeholder="Quer registrar algo sobre hoje? Escreve aqui.">${esc(x.obs||"")}</textarea>
-      <button class="btn-sm" id="ex-obs-save" style="margin-top:8px">Salvar observações</button></div>
-    <button class="finish ${x.concluidoEm?'done':''}" id="ex-finish" ${x.concluidoEm||faltam?'disabled':''}>
+    <div class="fld" style="margin-top:18px"><label>Observações do dia${travado?"":" (opcional)"}</label>
+      <textarea id="ex-obs" ${travado?"disabled":""} placeholder="Quer registrar algo sobre hoje? Escreve aqui.">${esc(x.obs||"")}</textarea>
+      ${travado?"":`<button class="btn-sm" id="ex-obs-save" style="margin-top:8px">Salvar observações</button>`}</div>
+    ${travado?"":`<button class="finish ${x.concluidoEm?'done':''}" id="ex-finish" ${x.concluidoEm||faltam?'disabled':''}>
       ${x.concluidoEm?`✓ Concluído às ${esc(x.concluidoEm)}`:(faltam?`Faltam ${faltam} itens`:"Concluir checklist")}
-    </button>
+    </button>`}
   `;
   $("ex-back").onclick=()=>renderMinhas();
   c.querySelectorAll("[data-tog]").forEach(el=> el.onclick=()=>togItem(+el.dataset.tog));
   c.querySelectorAll("[data-nc]").forEach(el=> el.onclick=()=>ncItem(+el.dataset.nc));
   const fb=$("ex-finish"); if(fb && !fb.disabled) fb.onclick=concluirExec;
-  $("ex-obs-save").onclick=async()=>{
+  const os=$("ex-obs-save"); if(os) os.onclick=async()=>{
     execRef.obs=$("ex-obs").value.trim();
     try{ await salvarExec(); toast("Observações salvas"); }
     catch(e){ toast("Não salvou — tente de novo."); }
@@ -442,6 +455,7 @@ async function salvarExec(){
 }
 async function togItem(ix){
   if(me.papel!=="funcionario" && me.papel!=="gerencia") return;
+  if(!podeEditar(execRef)){ toast("Encerrado — não dá mais pra alterar."); return; }
   const i=execRef.itens[ix];
   i.done=!i.done; i.doneEm=i.done?horaAgora():null;
   if(!i.done) execRef.concluidoEm=null;
@@ -449,6 +463,7 @@ async function togItem(ix){
   try{ await salvarExec(); }catch(e){ i.done=!i.done; renderExec(); toast("Não salvou — sem conexão? Tente de novo."); }
 }
 async function ncItem(ix){
+  if(!podeEditar(execRef)){ toast("Encerrado — não dá mais pra alterar."); return; }
   const i=execRef.itens[ix];
   if(i.nc){ if(confirm("Remover o problema relatado?")) i.nc=null; }
   else{ const t=prompt("Descreva o problema encontrado:"); if(t) i.nc=t.trim(); }
@@ -545,6 +560,7 @@ async function formAvulsa(){
       await addDoc(collection(db,"checklists"),{
         modeloId:null, nome, setor:u.setor, freq:"avulso",
         funcionarioUid:uid, funcionarioNome:u.nome, periodo:data, limite:"",
+        editavelAte: Timestamp.fromDate(limiteEdicao("avulso",data)),
         concluidoEm:null, itens:[{id:"1", t:nome, desc, done:false, doneEm:null, nc:null}],
         criadoEm:serverTimestamp()
       });
