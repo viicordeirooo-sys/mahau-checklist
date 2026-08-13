@@ -1,0 +1,8 @@
+{
+  "name": "mahau-checklist",
+  "version": "1.0.0",
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "nodemailer": "^6.9.16"
+  }
+}
