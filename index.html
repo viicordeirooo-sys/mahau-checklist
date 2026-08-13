@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mahau Operação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,600;125,700;125,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FFFFFF; --surface:#F5F6F8; --ink:#14181F; --muted:#667085;
+    --line:#E4E7EC; --green:#16A34A; --green-bg:#EAF7EF; --neon:#B8F642;
+    --red:#DC2626; --red-bg:#FDECEC; --amber:#D97706; --amber-bg:#FCF3E3;
+    --dark:#101418;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px;-webkit-font-smoothing:antialiased}
+  .disp{font-family:'Archivo',sans-serif;font-stretch:125%;text-transform:uppercase;letter-spacing:.04em}
+  button{font-family:inherit}
+
+  .topbar{background:var(--dark);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand .m{font-family:'Archivo';font-stretch:125%;font-weight:800;font-size:20px;letter-spacing:.08em;color:var(--neon)}
+  .brand .op{font-family:'Archivo';font-stretch:125%;font-weight:600;font-size:12px;letter-spacing:.22em;color:#9aa3ad}
+  .whoami{display:flex;align-items:center;gap:10px;font-size:13px;color:#c8cdd3}
+  .whoami .sair{background:none;border:1px solid #3a414a;color:#c8cdd3;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+
+  .wrap{max-width:900px;margin:0 auto;padding:18px 16px 90px}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  h1{font-family:'Archivo';font-stretch:125%;font-weight:800;font-size:23px;text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px}
+  h2{font-family:'Archivo';font-stretch:125%;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.06em;margin:22px 0 10px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:16px}
+
+  /* login */
+  .login-box{max-width:380px;margin:8vh auto 0}
+  .login-box input{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:15px;font-size:16px;font-family:inherit;margin-bottom:10px}
+  .btn-dark{width:100%;background:var(--dark);color:#fff;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:700;cursor:pointer}
+  .btn-dark:disabled{background:#d4d8de}
+  .login-err{color:var(--red);font-size:14px;margin-top:10px;display:none}
+
+  /* cards */
+  .card{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:15px 17px;margin-bottom:11px}
+  .card.tap{cursor:pointer}
+  .card.tap:active{background:var(--surface)}
+  .card .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .card h3{font-size:16px;font-weight:700}
+  .card .meta{font-size:13px;color:var(--muted);margin-top:3px}
+  .pill{font-size:12px;font-weight:700;border-radius:999px;padding:5px 11px;white-space:nowrap}
+  .pill.ok{background:var(--green-bg);color:var(--green)}
+  .pill.late{background:var(--red-bg);color:var(--red)}
+  .pill.open{background:var(--surface);color:var(--muted)}
+  .pill.nc{background:var(--amber-bg);color:var(--amber)}
+  .bar{height:8px;background:var(--surface);border-radius:99px;margin-top:11px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--green);border-radius:99px;transition:width .25s}
+  .bar i.late{background:var(--red)}
+
+  /* execução */
+  .back{background:none;border:none;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px}
+  .item{display:flex;align-items:flex-start;gap:13px;padding:15px 4px;border-bottom:1px solid var(--line)}
+  .chk{width:30px;height:30px;min-width:30px;border:2px solid #c3c9d1;border-radius:9px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .chk.on{background:var(--green);border-color:var(--green)}
+  .chk.on::after{content:"✓";color:#fff;font-weight:800;font-size:17px}
+  .item .txt{flex:1;font-size:16px;line-height:1.4;padding-top:3px}
+  .item .txt small{display:block;color:var(--muted);font-size:13px;margin-top:3px;line-height:1.45}
+  .item.done .txt{color:var(--muted)}
+  .item.done .txt b{text-decoration:line-through}
+  .probbtn{background:none;border:1.5px solid var(--line);border-radius:9px;color:var(--muted);font-size:12px;font-weight:700;padding:7px 10px;cursor:pointer;white-space:nowrap}
+  .probbtn.on{border-color:var(--amber);color:var(--amber);background:var(--amber-bg)}
+  .ncnote{margin:0 4px 12px 47px;font-size:13px;color:var(--amber);background:var(--amber-bg);border-radius:9px;padding:9px 12px}
+  .finish{width:100%;margin-top:18px;background:var(--dark);color:#fff;border:none;border-radius:13px;padding:17px;font-size:16px;font-weight:700;cursor:pointer}
+  .finish:disabled{background:#d4d8de}
+  .finish.done{background:var(--green)}
+
+  /* gestão */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px}
+  .stat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:13px;text-align:center}
+  .stat b{font-family:'Archivo';font-stretch:125%;font-weight:800;font-size:25px;display:block}
+  .stat span{font-size:12px;color:var(--muted);font-weight:600}
+  .stat.ok b{color:var(--green)} .stat.late b{color:var(--red)}
+  .ncline{background:var(--amber-bg);border-radius:12px;padding:12px 15px;font-size:14px;margin-bottom:8px;line-height:1.45}
+  .ncline b{color:var(--amber)}
+  .readonly{background:var(--surface);border:1.5px dashed #c3c9d1;color:var(--muted);border-radius:12px;padding:11px 15px;font-size:13px;font-weight:600;margin-bottom:16px}
+
+  /* tabs */
+  .tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1.5px solid var(--line);display:flex;z-index:20}
+  .tabs button{flex:1;background:none;border:none;padding:12px 4px 14px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;gap:3px;align-items:center}
+  .tabs button.on{color:var(--ink)}
+  .tabs button .ic{font-size:19px}
+
+  /* forms / editor */
+  .fld{margin-bottom:11px}
+  .fld label{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .fld input,.fld select,.fld textarea{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:13px;font-size:15px;font-family:inherit;background:#fff}
+  .fld textarea{min-height:70px;resize:vertical}
+  .btn-line{background:#fff;border:1.5px solid var(--dark);color:var(--ink);border-radius:11px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-sm{background:none;border:1.5px solid var(--line);border-radius:9px;color:var(--muted);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer}
+  .btn-sm.danger{color:var(--red);border-color:#f3c6c6}
+  .mi-row{display:flex;gap:8px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+  .mi-row .mi-txt{flex:1;font-size:15px;line-height:1.4}
+  .mi-row .mi-txt small{display:block;color:var(--muted);font-size:13px}
+  .seg{display:flex;background:var(--surface);border-radius:11px;padding:4px;margin-bottom:14px}
+  .seg button{flex:1;border:none;background:none;border-radius:8px;padding:9px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .mesnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .mesnav b{font-family:'Archivo';font-stretch:125%;font-weight:700;font-size:16px;text-transform:uppercase}
+  .mesnav button{background:#fff;border:1.5px solid var(--line);border-radius:10px;width:40px;height:40px;font-size:17px;cursor:pointer}
+
+  /* relatório */
+  .rep-setor{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:16px 17px;margin-bottom:12px}
+  .rep-setor .rhead{display:flex;justify-content:space-between;align-items:baseline}
+  .rep-setor .rhead h3{font-family:'Archivo';font-stretch:125%;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.05em}
+  .rep-setor .rpct{font-family:'Archivo';font-stretch:125%;font-weight:800;font-size:24px}
+  .rep-setor .rpct.g{color:var(--green)} .rep-setor .rpct.a{color:var(--amber)} .rep-setor .rpct.r{color:var(--red)}
+  .rbar{height:12px;background:var(--surface);border-radius:99px;margin:10px 0 8px;overflow:hidden}
+  .rbar i{display:block;height:100%;border-radius:99px}
+  .rmiss{font-size:13px;color:var(--muted);line-height:1.6}
+  .rmiss .chip{display:inline-block;background:var(--red-bg);color:var(--red);border-radius:7px;padding:2px 8px;font-weight:700;font-size:12px;margin:2px 3px 2px 0}
+  .toast{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--dark);color:#fff;border-radius:11px;padding:12px 18px;font-size:14px;font-weight:600;z-index:50;display:none;max-width:90vw;text-align:center}
+  .hidden{display:none!important}
+  .loading{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="m">MAHAU</span><span class="op">Operação</span></div>
+  <div class="whoami hidden" id="whoami"><span id="whoname"></span><button class="sair" id="btn-sair">Sair</button></div>
+</div>
+
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="view-login" class="hidden">
+    <div class="login-box">
+      <div class="eyebrow">Acesso da equipe</div>
+      <h1 class="disp">Entrar</h1>
+      <p class="sub">Use o e-mail e a senha que a gerência criou pra você.</p>
+      <input type="email" id="login-email" placeholder="E-mail" autocomplete="username">
+      <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password">
+      <button class="btn-dark" id="btn-login">Entrar</button>
+      <div class="login-err" id="login-err"></div>
+    </div>
+  </div>
+
+  <div id="view-app" class="hidden">
+    <div class="readonly hidden" id="ro-banner">👁 Somente visualização — perfil de sócio não edita nem preenche.</div>
+    <div id="tab-content"><div class="loading">Carregando…</div></div>
+  </div>
+
+</div>
+
+<div class="tabs hidden" id="tabs"></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+/* ==================================================================
+   MAHAU OPERAÇÃO — sistema de checklists internos
+   1) Cole abaixo o firebaseConfig do seu projeto (guia de subida)
+   ================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyCmmFt6b1okxyh3PF9m5u3y89uB05tCEVw",
+  authDomain: "mahau-operacao.firebaseapp.com",
+  projectId: "mahau-operacao",
+  storageBucket: "mahau-operacao.firebasestorage.app",
+  messagingSenderId: "661594357392",
+  appId: "1:661594357392:web:e2c9ab0a8d5995274f6215"
+};
+
+const SETORES = ["Bar","Cozinha","Limpeza","Salão","Segurança","Manutenção","Gerência"];
+
+/* ---------- Firebase ---------- */
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2,"0");
+const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const hojeISO = () => isoDate(new Date());
+function segundaDe(d){ const x=new Date(d); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); return x; }
+const semanaKey = d => isoDate(segundaDe(d));
+function addDias(iso,n){ const d=new Date(iso+"T12:00:00"); d.setDate(d.getDate()+n); return isoDate(d); }
+const fmtBR = iso => iso ? `${iso.slice(8,10)}/${iso.slice(5,7)}` : "";
+const fmtBRfull = iso => iso ? `${iso.slice(8,10)}/${iso.slice(5,7)}/${iso.slice(0,4)}` : "";
+function labelSemana(segISO){ return `seg ${fmtBR(segISO)} – dom ${fmtBR(addDias(segISO,6))}`; }
+const horaAgora = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DIAS_PT = ["dom","seg","ter","qua","qui","sex","sáb"];
+
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display="none", 2600); }
+
+async function audit(acao, detalhe){
+  try{ await addDoc(collection(db,"audit_log"), { acao, detalhe: detalhe||"", uid: me?.uid||"", nome: me?.nome||"", ts: serverTimestamp() }); }catch(e){ /* best-effort */ }
+}
+
+/* ---------- estado ---------- */
+let me = null;            // {uid, nome, papel, setor}
+let tabAtual = "painel";
+let cacheUsuarios = [];   // gestão
+let execRef = null;       // checklist em execução (funcionário)
+
+/* ---------- auth ---------- */
+onAuthStateChanged(auth, async (u) => {
+  if(!u){ me=null; mostrarLogin(); return; }
+  try{
+    const snap = await getDoc(doc(db,"usuarios",u.uid));
+    if(!snap.exists()){
+      $("login-err").style.display="block";
+      $("login-err").textContent="Seu acesso ainda não foi liberado. Fale com a gerência.";
+      await signOut(auth); return;
+    }
+    me = { uid: u.uid, ...snap.data() };
+    if(me.ativo === false){
+      $("login-err").style.display="block";
+      $("login-err").textContent="Acesso desativado. Fale com a gerência.";
+      await signOut(auth); return;
+    }
+    entrarApp();
+  }catch(e){ console.error(e); toast("Erro ao carregar seu perfil. Recarregue a página."); }
+});
+
+$("btn-login").onclick = async () => {
+  const email=$("login-email").value.trim(), senha=$("login-senha").value;
+  if(!email||!senha) return;
+  $("btn-login").disabled=true; $("login-err").style.display="none";
+  try{ await signInWithEmailAndPassword(auth,email,senha); }
+  catch(e){
+    $("login-err").style.display="block";
+    $("login-err").textContent="E-mail ou senha incorretos.";
+  }
+  $("btn-login").disabled=false;
+};
+$("login-senha").addEventListener("keydown", e=>{ if(e.key==="Enter") $("btn-login").click(); });
+$("btn-sair").onclick = () => signOut(auth);
+
+function mostrarLogin(){
+  $("view-login").classList.remove("hidden");
+  $("view-app").classList.add("hidden");
+  $("tabs").classList.add("hidden");
+  $("whoami").classList.add("hidden");
+}
+
+function entrarApp(){
+  $("view-login").classList.add("hidden");
+  $("view-app").classList.remove("hidden");
+  $("whoami").classList.remove("hidden");
+  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? `Gerência · ${me.nome}` : `${me.nome} · ${me.setor}`;
+  $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
+  montarTabs();
+  irTab(me.papel==="funcionario" ? "minhas" : "painel");
+}
+
+/* ---------- tabs ---------- */
+function montarTabs(){
+  const t=$("tabs"); t.classList.remove("hidden");
+  let defs;
+  if(me.papel==="funcionario"){
+    defs=[["minhas","📋","Tarefas"]];
+    t.classList.add("hidden"); // uma aba só, sem barra
+  }else if(me.papel==="gerencia"){
+    defs=[["painel","📊","Painel"],["func","👥","Equipe"],["modelos","⚙️","Modelos"],["relatorio","📄","Relatório"]];
+  }else{ // sócio
+    defs=[["painel","📊","Painel"],["func","👥","Equipe"],["relatorio","📄","Relatório"]];
+  }
+  t.innerHTML = defs.map(([id,ic,lb])=>`<button data-tab="${id}"><span class="ic">${ic}</span>${lb}</button>`).join("");
+  t.querySelectorAll("button").forEach(b=> b.onclick=()=>irTab(b.dataset.tab));
+}
+function irTab(tab){
+  tabAtual=tab;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===tab));
+  window.scrollTo(0,0);
+  if(tab==="minhas")    renderMinhas();
+  if(tab==="painel")    renderPainel();
+  if(tab==="func")      renderEquipe();
+  if(tab==="modelos")   renderModelos();
+  if(tab==="relatorio") renderRelatorio();
+}
+
+/* ---------- dados ---------- */
+async function getModelosAtivos(filtroFunc){
+  const conds=[ where("ativo","==",true) ];
+  if(filtroFunc) conds.push(where("funcionarioUid","==",filtroFunc));
+  const qs = await getDocs(query(collection(db,"modelos"), ...conds));
+  return qs.docs.map(d=>({id:d.id, ...d.data()}));
+}
+async function getChecklists(filtros){
+  const conds=[];
+  if(filtros.funcionarioUid) conds.push(where("funcionarioUid","==",filtros.funcionarioUid));
+  if(filtros.periodo)        conds.push(where("periodo","==",filtros.periodo));
+  if(filtros.periodoIn)      conds.push(where("periodo","in",filtros.periodoIn.slice(0,30)));
+  const qs = await getDocs(query(collection(db,"checklists"), ...conds));
+  return qs.docs.map(d=>({id:d.id, ...d.data()}));
+}
+async function getUsuarios(){
+  if(cacheUsuarios.length) return cacheUsuarios;
+  const qs = await getDocs(collection(db,"usuarios"));
+  cacheUsuarios = qs.docs.map(d=>({uid:d.id, ...d.data()}));
+  return cacheUsuarios;
+}
+
+function pctInst(c){ const n=c.itens.length||1; return Math.round(c.itens.filter(i=>i.done).length/n*100); }
+function periodoEncerrado(c){
+  const hoje=hojeISO();
+  if(c.freq==="semanal") return semanaKey(new Date()) > c.periodo;
+  return c.periodo < hoje; // diário e avulso
+}
+function statusInst(c){
+  if(c.concluidoEm) return "ok";
+  if(periodoEncerrado(c)) return "late";
+  return "open";
+}
+function pillInst(c){
+  const s=statusInst(c);
+  if(s==="ok") return '<span class="pill ok">Concluído</span>';
+  if(s==="late") return '<span class="pill late">Atrasado</span>';
+  return '<span class="pill open">Em andamento</span>';
+}
+
+/* gera as instâncias do funcionário logado (hoje + semana atual) */
+async function gerarMinhasInstancias(){
+  const modelos = await getModelosAtivos(me.uid);
+  const hoje=hojeISO(), seg=semanaKey(new Date());
+  for(const m of modelos){
+    const periodo = m.freq==="semanal" ? seg : hoje;
+    const id = `${m.id}_${periodo}`;
+    const ref = doc(db,"checklists",id);
+    const snap = await getDoc(ref);
+    if(!snap.exists()){
+      await setDoc(ref,{
+        modeloId:m.id, nome:m.nome, setor:m.setor, freq:m.freq,
+        funcionarioUid:me.uid, funcionarioNome:me.nome,
+        periodo, limite:m.limite||"", concluidoEm:null,
+        itens: (m.itens||[]).map(i=>({id:i.id, t:i.t, desc:i.desc||"", done:false, doneEm:null, nc:null})),
+        criadoEm: serverTimestamp()
+      });
+    }
+  }
+}
+
+/* ================== FUNCIONÁRIO ================== */
+async function renderMinhas(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando suas tarefas…</div>';
+  try{
+    await gerarMinhasInstancias();
+    const hoje=hojeISO(), seg=semanaKey(new Date());
+    const todas = await getChecklists({funcionarioUid: me.uid});
+    const doDia    = todas.filter(x=>x.freq!=="semanal" && x.periodo===hoje);
+    const daSemana = todas.filter(x=>x.freq==="semanal" && x.periodo===seg);
+    const atrasadas= todas.filter(x=>!x.concluidoEm && periodoEncerrado(x));
+
+    const bloco=(lista)=> lista.map(x=>`
+      <div class="card tap" data-open="${x.id}">
+        <div class="row"><h3>${esc(x.nome)}</h3>${pillInst(x)}</div>
+        <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBR(x.periodo):esc(x.limite||"hoje"))} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens</div>
+        <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
+      </div>`).join("") || '<p class="sub">Nada por aqui.</p>';
+
+    c.innerHTML = `
+      <div class="eyebrow">${esc(me.setor)} · ${esc(me.nome)}</div>
+      <h1 class="disp">Hoje · ${DIAS_PT[new Date().getDay()]} ${fmtBR(hoje)}</h1>
+      <p class="sub">Toque numa tarefa para preencher.</p>
+      ${atrasadas.length?`<h2>⚠ Atrasadas</h2>${bloco(atrasadas)}`:""}
+      <h2>Do dia</h2>${bloco(doDia)}
+      <h2>Da semana (${labelSemana(seg)})</h2>${bloco(daSemana)}
+    `;
+    c.querySelectorAll("[data-open]").forEach(el=> el.onclick=()=>abrirExec(el.dataset.open));
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar. Puxe pra atualizar ou recarregue a página.</p>'; }
+}
+
+async function abrirExec(id){
+  const snap = await getDoc(doc(db,"checklists",id));
+  if(!snap.exists()) return;
+  execRef = {id, ...snap.data()};
+  renderExec();
+}
+function renderExec(){
+  const x=execRef, c=$("tab-content");
+  const p=pctInst(x), faltam=x.itens.filter(i=>!i.done).length;
+  c.innerHTML=`
+    <button class="back" id="ex-back">← Voltar</button>
+    <div class="eyebrow">${esc(x.setor)}</div>
+    <h1 class="disp">${esc(x.nome)}</h1>
+    <p class="sub">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBRfull(x.periodo):esc(x.limite||"hoje"))} · marque cada item conforme for fazendo</p>
+    <div class="bar"><i style="width:${p}%"></i></div>
+    <div style="margin-top:8px">
+      ${x.itens.map((i,ix)=>`
+        <div class="item ${i.done?'done':''}">
+          <div class="chk ${i.done?'on':''}" data-tog="${ix}"></div>
+          <div class="txt"><b>${esc(i.t)}</b>${i.desc?`<small>${esc(i.desc)}</small>`:""}${i.done&&i.doneEm?`<small>✓ ${esc(i.doneEm)}</small>`:""}</div>
+          <button class="probbtn ${i.nc?'on':''}" data-nc="${ix}">${i.nc?'⚠ Problema':'Relatar'}</button>
+        </div>
+        ${i.nc?`<div class="ncnote">⚠ ${esc(i.nc)}</div>`:""}
+      `).join("")}
+    </div>
+    <button class="finish ${x.concluidoEm?'done':''}" id="ex-finish" ${x.concluidoEm||faltam?'disabled':''}>
+      ${x.concluidoEm?`✓ Concluído às ${esc(x.concluidoEm)}`:(faltam?`Faltam ${faltam} itens`:"Concluir checklist")}
+    </button>
+  `;
+  $("ex-back").onclick=()=>renderMinhas();
+  c.querySelectorAll("[data-tog]").forEach(el=> el.onclick=()=>togItem(+el.dataset.tog));
+  c.querySelectorAll("[data-nc]").forEach(el=> el.onclick=()=>ncItem(+el.dataset.nc));
+  const fb=$("ex-finish"); if(fb && !fb.disabled) fb.onclick=concluirExec;
+}
+async function salvarExec(){
+  await updateDoc(doc(db,"checklists",execRef.id), { itens: execRef.itens, concluidoEm: execRef.concluidoEm||null });
+}
+async function togItem(ix){
+  if(me.papel!=="funcionario" && me.papel!=="gerencia") return;
+  const i=execRef.itens[ix];
+  i.done=!i.done; i.doneEm=i.done?horaAgora():null;
+  if(!i.done) execRef.concluidoEm=null;
+  renderExec();
+  try{ await salvarExec(); }catch(e){ i.done=!i.done; renderExec(); toast("Não salvou — sem conexão? Tente de novo."); }
+}
+async function ncItem(ix){
+  const i=execRef.itens[ix];
+  if(i.nc){ if(confirm("Remover o problema relatado?")) i.nc=null; }
+  else{ const t=prompt("Descreva o problema encontrado:"); if(t) i.nc=t.trim(); }
+  renderExec();
+  try{ await salvarExec(); if(i.nc) audit("nc_relatada", `${execRef.nome}: ${i.nc}`); }
+  catch(e){ toast("Não salvou — tente de novo."); }
+}
+async function concluirExec(){
+  execRef.concluidoEm=horaAgora();
+  try{
+    await salvarExec();
+    audit("checklist_concluido", `${execRef.nome} (${execRef.periodo})`);
+    toast("✓ Checklist concluído");
+    renderExec();
+  }catch(e){ execRef.concluidoEm=null; toast("Não salvou — tente de novo."); }
+}
+
+/* ================== GESTÃO: PAINEL DO DIA ================== */
+async function renderPainel(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando painel…</div>';
+  try{
+    const hoje=hojeISO(), seg=semanaKey(new Date());
+    const [modelos, users, doDia, daSemana] = await Promise.all([
+      getModelosAtivos(), getUsuarios(),
+      getChecklists({periodo:hoje}), getChecklists({periodo:seg})
+    ]);
+    const nomeDe = uid => (users.find(u=>u.uid===uid)||{}).nome || "—";
+
+    // instâncias reais + esperadas (modelo ainda sem instância = não iniciado)
+    const virt=(m,periodo)=>({ id:"virt_"+m.id, virtual:true, modeloId:m.id, nome:m.nome, setor:m.setor, freq:m.freq,
+      funcionarioUid:m.funcionarioUid, periodo, limite:m.limite||"", concluidoEm:null,
+      itens:(m.itens||[]).map(i=>({...i,done:false,nc:null})) });
+    const listaDia = modelos.filter(m=>m.freq==="diario").map(m=> doDia.find(x=>x.modeloId===m.id) || virt(m,hoje));
+    doDia.filter(x=>x.freq==="avulso").forEach(x=>listaDia.push(x));
+    const listaSem = modelos.filter(m=>m.freq==="semanal").map(m=> daSemana.find(x=>x.modeloId===m.id) || virt(m,seg));
+
+    const tudo=[...listaDia,...listaSem];
+    const oks=tudo.filter(x=>statusInst(x)==="ok").length;
+    const lates=tudo.filter(x=>statusInst(x)==="late").length;
+
+    const ncs=[]; tudo.forEach(x=>x.itens.forEach(i=>{ if(i.nc) ncs.push({s:x.setor,c:x.nome,t:i.nc}); }));
+
+    const cardG=x=>{
+      const ncn=x.itens.filter(i=>i.nc).length;
+      return `<div class="card">
+        <div class="row"><h3>${esc(x.setor)} — ${esc(x.nome)}</h3>${pillInst(x)}</div>
+        <div class="meta">${esc(nomeDe(x.funcionarioUid))} · ${x.freq==="semanal"?labelSemana(x.periodo):esc(x.limite||"hoje")} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${ncn?` · <span class="pill nc">⚠ ${ncn}</span>`:""}</div>
+        <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
+      </div>`;
+    };
+
+    c.innerHTML=`
+      <div class="eyebrow">${me.papel==="socio"?"Sócio":"Gerência"}</div>
+      <h1 class="disp">Painel · ${DIAS_PT[new Date().getDay()]} ${fmtBR(hoje)}</h1>
+      <p class="sub">Visão em tempo real de todos os setores.</p>
+      <div class="stats">
+        <div class="stat ok"><b>${oks}</b><span>Concluídos</span></div>
+        <div class="stat"><b>${tudo.length-oks-lates}</b><span>Em andamento</span></div>
+        <div class="stat late"><b>${lates}</b><span>Atrasados</span></div>
+      </div>
+      <h2>⚠ Problemas relatados hoje</h2>
+      ${ncs.length? ncs.map(n=>`<div class="ncline"><b>${esc(n.s)} · ${esc(n.c)}:</b> ${esc(n.t)}</div>`).join("") : '<p class="sub">Nenhum problema relatado.</p>'}
+      <h2>Setores · hoje</h2>
+      ${listaDia.map(cardG).join("")||'<p class="sub">Nenhum checklist diário cadastrado ainda.</p>'}
+      <h2>Semana (${labelSemana(seg)})</h2>
+      ${listaSem.map(cardG).join("")||'<p class="sub">Nenhum checklist semanal cadastrado ainda.</p>'}
+      ${me.papel==="gerencia"?`<div style="margin-top:22px"><button class="btn-line" id="btn-avulsa">+ Lançar tarefa avulsa</button></div>`:""}
+    `;
+    const ba=$("btn-avulsa"); if(ba) ba.onclick=formAvulsa;
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar o painel. Recarregue a página.</p>'; }
+}
+
+async function formAvulsa(){
+  const users=(await getUsuarios()).filter(u=>u.papel==="funcionario"&&u.ativo!==false);
+  const c=$("tab-content");
+  c.innerHTML=`
+    <button class="back" id="av-back">← Voltar</button>
+    <h1 class="disp">Tarefa avulsa</h1>
+    <p class="sub">Vai aparecer só pro funcionário escolhido, no dia escolhido.</p>
+    <div class="fld"><label>Funcionário</label><select id="av-func">${users.map(u=>`<option value="${u.uid}">${esc(u.nome)} · ${esc(u.setor)}</option>`).join("")}</select></div>
+    <div class="fld"><label>Nome da tarefa</label><input id="av-nome" placeholder="Ex.: Trocar refletor do deck"></div>
+    <div class="fld"><label>Descrição exata do que fazer</label><textarea id="av-desc" placeholder="Descreva exatamente o que precisa ser feito"></textarea></div>
+    <div class="fld"><label>Data</label><input type="date" id="av-data" value="${hojeISO()}"></div>
+    <button class="btn-dark" id="av-salvar">Lançar tarefa</button>
+  `;
+  $("av-back").onclick=()=>irTab("painel");
+  $("av-salvar").onclick=async()=>{
+    const uid=$("av-func").value, nome=$("av-nome").value.trim(), desc=$("av-desc").value.trim(), data=$("av-data").value;
+    if(!uid||!nome||!data){ toast("Preencha funcionário, nome e data."); return; }
+    const u=users.find(x=>x.uid===uid);
+    try{
+      await addDoc(collection(db,"checklists"),{
+        modeloId:null, nome, setor:u.setor, freq:"avulso",
+        funcionarioUid:uid, funcionarioNome:u.nome, periodo:data, limite:"",
+        concluidoEm:null, itens:[{id:"1", t:nome, desc, done:false, doneEm:null, nc:null}],
+        criadoEm:serverTimestamp()
+      });
+      audit("avulsa_lancada", `${nome} → ${u.nome} (${data})`);
+      toast("Tarefa lançada"); irTab("painel");
+    }catch(e){ console.error(e); toast("Erro ao lançar. Tente de novo."); }
+  };
+}
+
+/* ================== GESTÃO: EQUIPE ================== */
+async function renderEquipe(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando equipe…</div>';
+  try{
+    cacheUsuarios=[]; const users=await getUsuarios();
+    const funcs=users.filter(u=>u.papel==="funcionario");
+    const outros=users.filter(u=>u.papel!=="funcionario");
+    c.innerHTML=`
+      <h1 class="disp">Equipe</h1>
+      <p class="sub">Toque num funcionário para ver o controle diário, semanal e mensal dele.</p>
+      ${me.papel==="gerencia"?`<button class="btn-line" id="btn-novo-user" style="margin-bottom:16px">+ Novo acesso</button>`:""}
+      <h2>Funcionários</h2>
+      ${funcs.map(u=>`
+        <div class="card tap" data-user="${u.uid}">
+          <div class="row"><h3>${esc(u.nome)}</h3><span class="pill ${u.ativo===false?'late':'open'}">${u.ativo===false?'Desativado':esc(u.setor)}</span></div>
+          <div class="meta">${esc(u.email||"")}</div>
+        </div>`).join("")||'<p class="sub">Nenhum funcionário cadastrado.</p>'}
+      <h2>Gestão</h2>
+      ${outros.map(u=>`<div class="card"><div class="row"><h3>${esc(u.nome)}</h3><span class="pill open">${u.papel==="socio"?"Sócio":"Gerência"}</span></div><div class="meta">${esc(u.email||"")}</div></div>`).join("")}
+    `;
+    c.querySelectorAll("[data-user]").forEach(el=> el.onclick=()=>renderControleFunc(el.dataset.user,"dia"));
+    const bn=$("btn-novo-user"); if(bn) bn.onclick=formNovoUsuario;
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar. Recarregue a página.</p>'; }
+}
+
+/* controle diário / semanal / mensal de um funcionário */
+async function renderControleFunc(uid, modo){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando…</div>';
+  try{
+    const users=await getUsuarios(); const u=users.find(x=>x.uid===uid);
+    const todas=await getChecklists({funcionarioUid:uid});
+    const modelos=await getModelosAtivos(uid);
+    const hoje=hojeISO(), seg=semanaKey(new Date()), mes=hoje.slice(0,7);
+
+    let lista=[], titulo="";
+    if(modo==="dia"){ titulo=`Hoje · ${fmtBR(hoje)}`;
+      lista=todas.filter(x=>x.periodo===hoje || (x.freq==="semanal"&&x.periodo===seg));
+      // esperados sem instância
+      modelos.forEach(m=>{ const p=m.freq==="semanal"?seg:hoje;
+        if(!todas.find(x=>x.modeloId===m.id&&x.periodo===p))
+          lista.push({virtual:true,nome:m.nome,setor:m.setor,freq:m.freq,periodo:p,limite:m.limite||"",concluidoEm:null,itens:(m.itens||[]).map(i=>({...i,done:false,nc:null}))});
+      });
+    }
+    if(modo==="semana"){ titulo=`Semana · ${labelSemana(seg)}`;
+      const dias=[...Array(7)].map((_,i)=>addDias(seg,i)).filter(d=>d<=hoje);
+      lista=todas.filter(x=> (x.freq==="semanal"&&x.periodo===seg) || (x.freq!=="semanal"&&dias.includes(x.periodo)) );
+    }
+    if(modo==="mes"){ titulo=`Mês · ${MESES[+mes.slice(5,7)-1]}`;
+      lista=todas.filter(x=>x.periodo.slice(0,7)===mes);
+    }
+    lista.sort((a,b)=> (a.periodo<b.periodo?1:-1));
+
+    c.innerHTML=`
+      <button class="back" id="cf-back">← Equipe</button>
+      <div class="eyebrow">${esc(u.setor)} · controle</div>
+      <h1 class="disp">${esc(u.nome)}</h1>
+      <div class="seg" style="margin-top:12px">
+        <button data-m="dia" class="${modo==='dia'?'on':''}">Dia</button>
+        <button data-m="semana" class="${modo==='semana'?'on':''}">Semana</button>
+        <button data-m="mes" class="${modo==='mes'?'on':''}">Mês</button>
+      </div>
+      <p class="sub">${titulo}</p>
+      ${lista.map(x=>`
+        <div class="card">
+          <div class="row"><h3>${esc(x.nome)}</h3>${pillInst(x)}</div>
+          <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):fmtBR(x.periodo)} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${x.concluidoEm?` · ✓ ${esc(x.concluidoEm)}`:""}${x.itens.some(i=>i.nc)?' · <span class="pill nc">⚠ problema</span>':""}</div>
+          <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
+          ${x.itens.filter(i=>i.nc).map(i=>`<div class="ncnote" style="margin:10px 0 0">⚠ ${esc(i.t)}: ${esc(i.nc)}</div>`).join("")}
+        </div>`).join("")||'<p class="sub">Nada registrado nesse período.</p>'}
+    `;
+    $("cf-back").onclick=()=>irTab("func");
+    c.querySelectorAll("[data-m]").forEach(b=> b.onclick=()=>renderControleFunc(uid,b.dataset.m));
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar. Recarregue a página.</p>'; }
+}
+
+/* novo acesso (gerência) */
+function formNovoUsuario(){
+  const c=$("tab-content");
+  c.innerHTML=`
+    <button class="back" id="nu-back">← Equipe</button>
+    <h1 class="disp">Novo acesso</h1>
+    <p class="sub">Cria o login que a pessoa vai usar pra entrar.</p>
+    <div class="fld"><label>Nome</label><input id="nu-nome" placeholder="Nome da pessoa"></div>
+    <div class="fld"><label>E-mail (login)</label><input type="email" id="nu-email" placeholder="email@exemplo.com"></div>
+    <div class="fld"><label>Senha inicial (mín. 6)</label><input id="nu-senha" placeholder="Senha que você vai passar pra pessoa"></div>
+    <div class="fld"><label>Papel</label><select id="nu-papel">
+      <option value="funcionario">Funcionário</option>
+      <option value="gerencia">Gerência</option>
+      <option value="socio">Sócio (só visualiza)</option>
+    </select></div>
+    <div class="fld"><label>Setor</label><select id="nu-setor">${SETORES.map(s=>`<option>${s}</option>`).join("")}</select></div>
+    <button class="btn-dark" id="nu-salvar">Criar acesso</button>
+  `;
+  $("nu-back").onclick=()=>irTab("func");
+  $("nu-salvar").onclick=async()=>{
+    const nome=$("nu-nome").value.trim(), email=$("nu-email").value.trim(),
+          senha=$("nu-senha").value, papel=$("nu-papel").value, setor=$("nu-setor").value;
+    if(!nome||!email||senha.length<6){ toast("Preencha nome, e-mail e senha (mín. 6)."); return; }
+    $("nu-salvar").disabled=true;
+    let app2=null;
+    try{
+      app2=initializeApp(firebaseConfig,"criar-"+Date.now());
+      const auth2=getAuth(app2);
+      const cred=await createUserWithEmailAndPassword(auth2,email,senha);
+      await setDoc(doc(db,"usuarios",cred.user.uid),{ nome, email, papel, setor, ativo:true, criadoEm:serverTimestamp() });
+      await signOut(auth2);
+      audit("usuario_criado", `${nome} (${papel} · ${setor})`);
+      cacheUsuarios=[]; toast("Acesso criado"); irTab("func");
+    }catch(e){
+      console.error(e);
+      toast(e.code==="auth/email-already-in-use"?"Esse e-mail já tem acesso.":"Erro ao criar. Confira os dados.");
+      $("nu-salvar").disabled=false;
+    }finally{ if(app2) try{ await deleteApp(app2); }catch(_){} }
+  };
+}
+
+/* ================== GESTÃO: MODELOS ================== */
+async function renderModelos(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando modelos…</div>';
+  try{
+    const qs=await getDocs(collection(db,"modelos"));
+    const modelos=qs.docs.map(d=>({id:d.id,...d.data()})).filter(m=>m.ativo!==false);
+    const users=await getUsuarios();
+    const nomeDe=uid=>(users.find(u=>u.uid===uid)||{}).nome||"—";
+    c.innerHTML=`
+      <h1 class="disp">Modelos de checklist</h1>
+      <p class="sub">O que cada funcionário recebe todo dia ou toda semana. Só a gerência edita.</p>
+      <button class="btn-line" id="btn-novo-modelo" style="margin-bottom:16px">+ Novo modelo</button>
+      ${modelos.map(m=>`
+        <div class="card tap" data-edit="${m.id}">
+          <div class="row"><h3>${esc(m.setor)} — ${esc(m.nome)}</h3><span class="pill open">${m.freq==="semanal"?"Semanal":"Diário"}</span></div>
+          <div class="meta">${esc(nomeDe(m.funcionarioUid))} · ${(m.itens||[]).length} itens${m.limite?` · ${esc(m.limite)}`:""}</div>
+        </div>`).join("")||'<p class="sub">Nenhum modelo ainda. Crie o primeiro.</p>'}
+    `;
+    $("btn-novo-modelo").onclick=()=>editorModelo(null);
+    c.querySelectorAll("[data-edit]").forEach(el=> el.onclick=()=>editorModelo(modelos.find(m=>m.id===el.dataset.edit)));
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar. Recarregue a página.</p>'; }
+}
+
+let edM=null; // modelo em edição
+async function editorModelo(m){
+  const users=(await getUsuarios()).filter(u=>u.papel!=="socio"&&u.ativo!==false);
+  edM = m ? JSON.parse(JSON.stringify(m)) : { nome:"", setor:SETORES[0], freq:"diario", limite:"", funcionarioUid:users[0]?.uid||"", itens:[], ativo:true };
+  desenharEditor(users);
+}
+function desenharEditor(users){
+  const c=$("tab-content"), novo=!edM.id;
+  c.innerHTML=`
+    <button class="back" id="em-back">← Modelos</button>
+    <h1 class="disp">${novo?"Novo modelo":"Editar modelo"}</h1>
+    <div class="fld"><label>Nome do checklist</label><input id="em-nome" value="${esc(edM.nome)}" placeholder="Ex.: Abertura do bar"></div>
+    <div class="fld"><label>Setor</label><select id="em-setor">${SETORES.map(s=>`<option ${s===edM.setor?"selected":""}>${s}</option>`).join("")}</select></div>
+    <div class="fld"><label>Responsável</label><select id="em-func">${users.map(u=>`<option value="${u.uid}" ${u.uid===edM.funcionarioUid?"selected":""}>${esc(u.nome)} · ${esc(u.setor)}</option>`).join("")}</select></div>
+    <div class="fld"><label>Frequência</label><select id="em-freq">
+      <option value="diario" ${edM.freq==="diario"?"selected":""}>Diário</option>
+      <option value="semanal" ${edM.freq==="semanal"?"selected":""}>Semanal</option>
+    </select></div>
+    <div class="fld"><label>Prazo (texto livre)</label><input id="em-limite" value="${esc(edM.limite||"")}" placeholder="Ex.: até 17h / até domingo"></div>
+    <h2>Itens (${edM.itens.length})</h2>
+    ${edM.itens.map((i,ix)=>`
+      <div class="mi-row">
+        <div class="mi-txt"><b>${esc(i.t)}</b>${i.desc?`<small>${esc(i.desc)}</small>`:""}</div>
+        <button class="btn-sm" data-iedit="${ix}">Editar</button>
+        <button class="btn-sm danger" data-idel="${ix}">✕</button>
+      </div>`).join("")||'<p class="sub">Nenhum item ainda.</p>'}
+    <div style="margin:14px 0 22px"><button class="btn-line" id="em-add">+ Adicionar item</button></div>
+    <button class="btn-dark" id="em-salvar">${novo?"Criar modelo":"Salvar alterações"}</button>
+    ${!novo?`<div style="margin-top:12px;text-align:center"><button class="btn-sm danger" id="em-off">Desativar este modelo</button></div>`:""}
+  `;
+  $("em-back").onclick=()=>irTab("modelos");
+  $("em-add").onclick=()=>{
+    const t=prompt("Item (o que fazer):"); if(!t) return;
+    const d=prompt("Descrição exata (opcional — explique como fazer):")||"";
+    edM.itens.push({id:String(Date.now()), t:t.trim(), desc:d.trim()});
+    sync(); desenharEditor(users);
+  };
+  c.querySelectorAll("[data-idel]").forEach(b=> b.onclick=()=>{ if(confirm("Apagar este item do modelo?")){ edM.itens.splice(+b.dataset.idel,1); sync(); desenharEditor(users);} });
+  c.querySelectorAll("[data-iedit]").forEach(b=> b.onclick=()=>{
+    const i=edM.itens[+b.dataset.iedit];
+    const t=prompt("Item:",i.t); if(t===null) return; i.t=t.trim()||i.t;
+    const d=prompt("Descrição exata (opcional):",i.desc||""); if(d!==null) i.desc=d.trim();
+    sync(); desenharEditor(users);
+  });
+  function sync(){ edM.nome=$("em-nome").value; edM.setor=$("em-setor").value; edM.funcionarioUid=$("em-func").value; edM.freq=$("em-freq").value; edM.limite=$("em-limite").value; }
+  $("em-salvar").onclick=async()=>{
+    sync();
+    if(!edM.nome.trim()||!edM.itens.length){ toast("Dê um nome e adicione pelo menos 1 item."); return; }
+    const u=users.find(x=>x.uid===edM.funcionarioUid);
+    const dados={ nome:edM.nome.trim(), setor:edM.setor, freq:edM.freq, limite:edM.limite.trim(),
+      funcionarioUid:edM.funcionarioUid, funcionarioNome:u?.nome||"", itens:edM.itens, ativo:true,
+      inicioEm: edM.inicioEm || hojeISO(), atualizadoEm:serverTimestamp() };
+    try{
+      if(edM.id){ await updateDoc(doc(db,"modelos",edM.id),dados); audit("modelo_editado",edM.nome); }
+      else{ await addDoc(collection(db,"modelos"),{...dados,criadoEm:serverTimestamp()}); audit("modelo_criado",edM.nome); }
+      toast("Modelo salvo"); irTab("modelos");
+    }catch(e){ console.error(e); toast("Erro ao salvar. Tente de novo."); }
+  };
+  const off=$("em-off"); if(off) off.onclick=async()=>{
+    if(!confirm("Desativar este modelo? Ele para de gerar checklists (o histórico fica guardado).")) return;
+    try{ await updateDoc(doc(db,"modelos",edM.id),{ativo:false,atualizadoEm:serverTimestamp()}); audit("modelo_desativado",edM.nome); toast("Modelo desativado"); irTab("modelos"); }
+    catch(e){ toast("Erro. Tente de novo."); }
+  };
+}
+
+/* ================== RELATÓRIO MENSAL ================== */
+let repMes = hojeISO().slice(0,7);
+async function renderRelatorio(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Fechando as contas do mês…</div>';
+  try{
+    const [ano,mn]=repMes.split("-").map(Number);
+    const primeiro=`${repMes}-01`;
+    const ultimoDia=new Date(ano,mn,0).getDate();
+    const hoje=hojeISO();
+    const fim = repMes===hoje.slice(0,7) ? hoje : `${repMes}-${pad(ultimoDia)}`;
+
+    const qs=await getDocs(collection(db,"modelos"));
+    const modelos=qs.docs.map(d=>({id:d.id,...d.data()}));
+    const qs2=await getDocs(query(collection(db,"checklists"))); // filtrado client-side por mês
+    const insts=qs2.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.periodo>=primeiro&&x.periodo<=fim);
+
+    // esperado x entregue por setor
+    const porSetor={};
+    const add=(setor)=> porSetor[setor]??={esperado:0,entregue:0,faltas:[]};
+    for(const m of modelos){
+      const inicio = m.inicioEm || primeiro;
+      if(m.freq==="diario"){
+        for(let d=primeiro; d<=fim; d=addDias(d,1)){
+          if(d<inicio) continue;
+          if(m.ativo===false && !insts.find(x=>x.modeloId===m.id&&x.periodo===d)) continue;
+          add(m.setor); porSetor[m.setor].esperado++;
+          const inst=insts.find(x=>x.modeloId===m.id&&x.periodo===d);
+          if(inst&&inst.concluidoEm) porSetor[m.setor].entregue++;
+          else if(d<hoje) porSetor[m.setor].faltas.push({dia:d,nome:m.nome});
+        }
+      }else{ // semanal — semanas cujo início cai no mês visível
+        for(let s=semanaKey(new Date(primeiro+"T12:00:00")); s<=fim; s=addDias(s,7)){
+          if(s<primeiro&&addDias(s,6)<primeiro) continue;
+          if(s<inicio) continue;
+          add(m.setor); porSetor[m.setor].esperado++;
+          const inst=insts.find(x=>x.modeloId===m.id&&x.periodo===s);
+          if(inst&&inst.concluidoEm) porSetor[m.setor].entregue++;
+          else if(addDias(s,6)<hoje) porSetor[m.setor].faltas.push({dia:s,nome:m.nome,sem:true});
+        }
+      }
+    }
+    // avulsas
+    insts.filter(x=>x.freq==="avulso").forEach(x=>{
+      add(x.setor); porSetor[x.setor].esperado++;
+      if(x.concluidoEm) porSetor[x.setor].entregue++;
+      else if(x.periodo<hoje) porSetor[x.setor].faltas.push({dia:x.periodo,nome:x.nome});
+    });
+
+    const setores=Object.keys(porSetor).sort();
+    const totE=setores.reduce((a,s)=>a+porSetor[s].esperado,0);
+    const totOk=setores.reduce((a,s)=>a+porSetor[s].entregue,0);
+    const pctT= totE?Math.round(totOk/totE*100):0;
+    const cls=p=> p>=90?"g":(p>=70?"a":"r");
+    const cor=p=> p>=90?"var(--green)":(p>=70?"var(--amber)":"var(--red)");
+
+    c.innerHTML=`
+      <h1 class="disp">Relatório mensal</h1>
+      <div class="mesnav">
+        <button id="rep-prev">‹</button>
+        <b>${MESES[mn-1]} ${ano}</b>
+        <button id="rep-next">›</button>
+      </div>
+      <div class="rep-setor" style="border-color:var(--dark)">
+        <div class="rhead"><h3>Casa toda</h3><span class="rpct ${cls(pctT)}">${pctT}%</span></div>
+        <div class="rbar"><i style="width:${pctT}%;background:${cor(pctT)}"></i></div>
+        <div class="rmiss">${totOk} de ${totE} checklists entregues no mês.</div>
+      </div>
+      ${setores.map(s=>{
+        const d=porSetor[s], p=d.esperado?Math.round(d.entregue/d.esperado*100):0;
+        return `<div class="rep-setor">
+          <div class="rhead"><h3>${esc(s)}</h3><span class="rpct ${cls(p)}">${p}%</span></div>
+          <div class="rbar"><i style="width:${p}%;background:${cor(p)}"></i></div>
+          <div class="rmiss">${d.entregue}/${d.esperado} entregues.
+            ${d.faltas.length?`<br>Não entregues: ${d.faltas.map(f=>`<span class="chip">${f.sem?"sem. de ":""}${fmtBR(f.dia)} · ${esc(f.nome)}</span>`).join("")}`:" Tudo em dia. ✓"}
+          </div>
+        </div>`;
+      }).join("")||'<p class="sub">Sem dados nesse mês.</p>'}
+      <p class="sub" style="margin-top:14px">Gerado em ${fmtBRfull(hoje)} às ${horaAgora()}. Para guardar: menu do navegador → Imprimir → Salvar como PDF.</p>
+    `;
+    $("rep-prev").onclick=()=>{ const d=new Date(ano,mn-2,1); repMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`; renderRelatorio(); };
+    $("rep-next").onclick=()=>{ const d=new Date(ano,mn,1); repMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`; renderRelatorio(); };
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao montar o relatório. Recarregue a página.</p>'; }
+}
+</script>
+</body>
+</html>
