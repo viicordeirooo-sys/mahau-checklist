@@ -390,7 +390,7 @@ async function renderMinhas(){
     const bloco=(lista)=> lista.map(x=>`
       <div class="card tap" data-open="${x.id}">
         <div class="row"><h3>${esc(x.nome)}</h3>${pillInst(x)}</div>
-        <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBR(x.periodo):esc(x.limite||"hoje"))} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens</div>
+        <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBR(x.periodo):"hoje")} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens</div>
         <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
       </div>`).join("") || '<p class="sub">Nada por aqui.</p>';
 
@@ -420,7 +420,7 @@ function renderExec(){
     <button class="back" id="ex-back">← Voltar</button>
     <div class="eyebrow">${esc(x.setor)}</div>
     <h1 class="disp">${esc(x.nome)}</h1>
-    <p class="sub">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBRfull(x.periodo):esc(x.limite||"hoje"))} · marque cada item conforme for fazendo</p>
+    <p class="sub">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBRfull(x.periodo):"hoje")} · marque cada item conforme for fazendo</p>
     <div class="bar"><i style="width:${p}%"></i></div>
     <div style="margin-top:8px">
       ${travado?`<div class="readonly" style="margin-top:14px">🔒 Encerrado — esse checklist fechou e não pode mais ser alterado. O que ficou em aberto conta como não feito.</div>`:""}
@@ -510,7 +510,7 @@ async function renderPainel(){
       const ncn=x.itens.filter(i=>i.nc).length;
       return `<div class="card">
         <div class="row"><h3>${esc(x.setor)} — ${esc(x.nome)}</h3>${pillInst(x)}</div>
-        <div class="meta">${esc(nomeDe(x.funcionarioUid))} · ${x.freq==="semanal"?labelSemana(x.periodo):esc(x.limite||"hoje")} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${ncn?` · <span class="pill nc">⚠ ${ncn}</span>`:""}</div>
+        <div class="meta">${esc(nomeDe(x.funcionarioUid))} · ${x.freq==="semanal"?labelSemana(x.periodo):"hoje"} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${ncn?` · <span class="pill nc">⚠ ${ncn}</span>`:""}</div>
         <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
         ${x.obs?`<div class="meta" style="margin-top:9px">📝 ${esc(x.obs)}</div>`:""}
       </div>`;
@@ -736,7 +736,7 @@ async function renderModelos(){
       ${modelos.map(m=>`
         <div class="card tap" data-edit="${m.id}">
           <div class="row"><h3>${esc(m.setor)} — ${esc(m.nome)}</h3><span class="pill open">${m.freq==="semanal"?"Semanal":"Diário"}</span></div>
-          <div class="meta">${esc(nomeDe(m.funcionarioUid))} · ${(m.itens||[]).length} itens${m.limite?` · ${esc(m.limite)}`:""}${m.freq==="diario"&&m.dias?` · ${[1,2,3,4,5,6,0].filter(d=>m.dias.includes(d)).map(d=>DIAS_LB[d]).join(" ")}`:""}</div>
+          <div class="meta">${esc(nomeDe(m.funcionarioUid))} · ${(m.itens||[]).length} itens${m.freq==="diario"&&m.dias?` · ${[1,2,3,4,5,6,0].filter(d=>m.dias.includes(d)).map(d=>DIAS_LB[d]).join(" ")}`:""}</div>
         </div>`).join("")||'<p class="sub">Nenhum modelo ainda. Crie o primeiro.</p>'}
     `;
     $("btn-novo-modelo").onclick=()=>editorModelo(null);
@@ -763,7 +763,6 @@ function desenharEditor(users){
       <option value="diario" ${edM.freq==="diario"?"selected":""}>Diário</option>
       <option value="semanal" ${edM.freq==="semanal"?"selected":""}>Semanal</option>
     </select></div>
-    <div class="fld"><label>Prazo (texto livre)</label><input id="em-limite" value="${esc(edM.limite||"")}" placeholder="Ex.: até 17h / até domingo"></div>
     <div class="fld" id="em-dias-box" style="${edM.freq==='semanal'?'display:none':''}"><label>Dias em que repete</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${[1,2,3,4,5,6,0].map(d=>`<button type="button" class="btn-sm" data-dia="${d}" style="${edM.dias.includes(d)?'border-color:var(--dark);color:var(--ink);font-weight:800':''}">${DIAS_LB[d]}</button>`).join("")}
@@ -801,13 +800,13 @@ function desenharEditor(users){
     const d=prompt("Descrição exata (opcional):",i.desc||""); if(d!==null) i.desc=d.trim();
     sync(); desenharEditor(users);
   });
-  function sync(){ edM.nome=$("em-nome").value; edM.setor=$("em-setor").value; edM.funcionarioUid=$("em-func").value; edM.freq=$("em-freq").value; edM.limite=$("em-limite").value; }
+  function sync(){ edM.nome=$("em-nome").value; edM.setor=$("em-setor").value; edM.funcionarioUid=$("em-func").value; edM.freq=$("em-freq").value; }
   $("em-salvar").onclick=async()=>{
     sync();
     if(!edM.nome.trim()||!edM.itens.length){ toast("Dê um nome e adicione pelo menos 1 item."); return; }
     if(edM.freq==="diario" && !edM.dias.length){ toast("Marque pelo menos 1 dia da semana."); return; }
     const u=users.find(x=>x.uid===edM.funcionarioUid);
-    const dados={ nome:edM.nome.trim(), setor:edM.setor, freq:edM.freq, limite:edM.limite.trim(),
+    const dados={ nome:edM.nome.trim(), setor:edM.setor, freq:edM.freq, limite:"",
       dias:edM.dias, funcionarioUid:edM.funcionarioUid, funcionarioNome:u?.nome||"", itens:edM.itens, ativo:true,
       inicioEm: edM.inicioEm || hojeISO(), atualizadoEm:serverTimestamp() };
     try{
@@ -980,7 +979,7 @@ async function renderRelatorioDia(){
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
                 <b style="font-size:15px">${esc(x.nome)}</b>${pillInst(x)}
               </div>
-              <div class="meta" style="margin:2px 0 6px">${esc(st.nomeDe(x.funcionarioUid))}${x.limite?` · ${esc(x.limite)}`:""}${x.concluidoEm?` · concluído às ${esc(x.concluidoEm)}`:""}</div>
+              <div class="meta" style="margin:2px 0 6px">${esc(st.nomeDe(x.funcionarioUid))}${x.concluidoEm?` · concluído às ${esc(x.concluidoEm)}`:""}</div>
               ${x.itens.map(i=>`
                 <div class="rd-item ${i.done?'ok':'no'}"><span class="b">${i.done?"✓":"✗"}</span><span>${esc(i.t)}${i.done&&i.doneEm?` <small style="color:var(--muted)">(${esc(i.doneEm)})</small>`:""}</span></div>
                 ${i.nc?`<div class="ncnote" style="margin:2px 0 6px 29px">⚠ ${esc(i.nc)}</div>`:""}
