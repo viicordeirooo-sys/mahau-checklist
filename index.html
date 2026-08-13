@@ -186,11 +186,11 @@ const modeloValeNoDia = (m, iso) => (!m.dias || !m.dias.length) ? true : m.dias.
 /* ---------- Firebase ---------- */
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db   = getFirestore(app);
+const db   = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -580,7 +580,7 @@ async function exportarBackup(){
 async function renderEquipe(){
   const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando equipe…</div>';
   try{
-    cacheUsuarios=[]; const users=await getUsuarios();
+    const users=await getUsuarios();
     const funcs=users.filter(u=>u.papel==="funcionario");
     const outros=users.filter(u=>u.papel!=="funcionario");
     c.innerHTML=`
