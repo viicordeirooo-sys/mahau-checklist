@@ -118,6 +118,16 @@
   .toast{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--dark);color:#fff;border-radius:11px;padding:12px 18px;font-size:14px;font-weight:600;z-index:50;display:none;max-width:90vw;text-align:center}
   .hidden{display:none!important}
   .loading{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
+  .rd-item{display:flex;gap:9px;font-size:14px;padding:5px 0;align-items:flex-start;line-height:1.4}
+  .rd-item .b{min-width:20px;text-align:center;font-weight:800}
+  .rd-item.ok .b{color:var(--green)} .rd-item.no .b{color:var(--red)}
+  .rd-item.no span{color:var(--muted)}
+  @media print{
+    .topbar,.tabs,.back,.seg,.mesnav,#rep-actions,.readonly{display:none!important}
+    body{font-size:12px} .wrap{max-width:100%;padding:0}
+    .card,.rep-setor{break-inside:avoid;border-color:#bbb}
+    .toast{display:none!important}
+  }
 </style>
 </head>
 <body>
@@ -261,7 +271,7 @@ function entrarApp(){
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
   $("whoami").classList.remove("hidden");
-  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? `Gerência · ${me.nome}` : `${me.nome} · Resp. ${me.setor}`;
+  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? "Gerência" : `Resp. ${me.setor}`;
   $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
   montarTabs();
   irTab(me.papel==="funcionario" ? "minhas" : "painel");
@@ -797,88 +807,232 @@ function desenharEditor(users){
   };
 }
 
-/* ================== RELATÓRIO MENSAL ================== */
-let repMes = hojeISO().slice(0,7);
-async function renderRelatorio(){
+/* ================== RELATÓRIO (dia / semana / mês) ================== */
+let repTipo="dia";
+let repDia=hojeISO();
+let repSem=semanaKey(new Date());
+let repMes=hojeISO().slice(0,7);
+
+function renderRelatorio(){ repTipo==="dia"?renderRelatorioDia():repTipo==="sem"?renderRelatorioSem():renderRelatorioMes(); }
+function segRelatorio(){
+  return `<div class="seg">
+    <button id="rt-dia" class="${repTipo==='dia'?'on':''}">Diário</button>
+    <button id="rt-sem" class="${repTipo==='sem'?'on':''}">Semanal</button>
+    <button id="rt-mes" class="${repTipo==='mes'?'on':''}">Mensal</button>
+  </div>`;
+}
+function ligarSeg(){
+  $("rt-dia").onclick=()=>{repTipo="dia";renderRelatorio();};
+  $("rt-sem").onclick=()=>{repTipo="sem";renderRelatorio();};
+  $("rt-mes").onclick=()=>{repTipo="mes";renderRelatorio();};
+}
+const clsPct=p=> p>=90?"g":(p>=70?"a":"r");
+const corPct=p=> p>=90?"var(--green)":(p>=70?"var(--amber)":"var(--red)");
+
+/* junta esperado x entregue no intervalo [ini..fim] (datas ISO) */
+async function statsPeriodo(ini,fim){
+  const hoje=hojeISO();
+  const [qsM,qsC,users]=await Promise.all([
+    getDocs(collection(db,"modelos")), getDocs(collection(db,"checklists")), getUsuarios()
+  ]);
+  const modelos=qsM.docs.map(d=>({id:d.id,...d.data()}));
+  const insts=qsC.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.periodo>=ini&&x.periodo<=fim);
+  const nomeDe=uid=>(users.find(u=>u.uid===uid)||{}).nome||"—";
+
+  const porSetor={}, porResp={}, abertos=[];
+  const addS=s=>porSetor[s]??={esp:0,ok:0,faltas:[]};
+  const addR=(uid,setor)=>porResp[uid]??={nome:nomeDe(uid),setor,esp:0,ok:0};
+  const conta=(m,periodo,ehSemana)=>{
+    addS(m.setor); addR(m.funcionarioUid,m.setor);
+    porSetor[m.setor].esp++; porResp[m.funcionarioUid].esp++;
+    const inst=insts.find(x=>x.modeloId===m.id&&x.periodo===periodo);
+    if(inst&&inst.concluidoEm){ porSetor[m.setor].ok++; porResp[m.funcionarioUid].ok++; }
+    else{
+      const encerrado = ehSemana ? addDias(periodo,6)<hoje : periodo<hoje;
+      porSetor[m.setor].faltas.push({dia:periodo,nome:m.nome,sem:ehSemana});
+      abertos.push({dia:periodo,nome:m.nome,setor:m.setor,resp:nomeDe(m.funcionarioUid),sem:ehSemana,atrasado:encerrado});
+    }
+  };
+  const fimEf = fim>hoje?hoje:fim;
+  for(const m of modelos){
+    const inicio=m.inicioEm||ini;
+    if(m.ativo===false && !insts.some(x=>x.modeloId===m.id)) continue;
+    if(m.freq==="diario"){
+      for(let d=ini; d<=fimEf; d=addDias(d,1)){
+        if(d<inicio||!modeloValeNoDia(m,d)) continue;
+        conta(m,d,false);
+      }
+    }else{
+      for(let sg=semanaKey(new Date(ini+"T12:00:00")); sg<=fimEf; sg=addDias(sg,7)){
+        if(addDias(sg,6)<ini) continue;
+        if(sg<inicio) continue;
+        conta(m,sg,true);
+      }
+    }
+  }
+  insts.filter(x=>x.freq==="avulso").forEach(x=>{
+    addS(x.setor); addR(x.funcionarioUid,x.setor);
+    porSetor[x.setor].esp++; porResp[x.funcionarioUid].esp++;
+    if(x.concluidoEm){ porSetor[x.setor].ok++; porResp[x.funcionarioUid].ok++; }
+    else{
+      porSetor[x.setor].faltas.push({dia:x.periodo,nome:x.nome});
+      abertos.push({dia:x.periodo,nome:x.nome,setor:x.setor,resp:nomeDe(x.funcionarioUid),atrasado:x.periodo<hoje});
+    }
+  });
+  const totE=Object.values(porSetor).reduce((a,v)=>a+v.esp,0);
+  const totOk=Object.values(porSetor).reduce((a,v)=>a+v.ok,0);
+  return {porSetor,porResp,abertos,totE,totOk,insts,modelos,nomeDe};
+}
+
+/* dashboard: ranking de responsáveis + pendências em aberto */
+function dashboardHTML(st){
+  const pctT=st.totE?Math.round(st.totOk/st.totE*100):0;
+  const ranking=Object.values(st.porResp).filter(r=>r.esp>0)
+    .map(r=>({...r,pct:Math.round(r.ok/r.esp*100)}))
+    .sort((a,b)=>b.pct-a.pct||b.ok-a.ok);
+  const abertosOrd=[...st.abertos].sort((a,b)=>a.dia<b.dia?-1:1);
+  return `
+    <div class="rep-setor" style="border-color:var(--dark)">
+      <div class="rhead"><h3>Casa toda</h3><span class="rpct ${clsPct(pctT)}">${pctT}%</span></div>
+      <div class="rbar"><i style="width:${pctT}%;background:${corPct(pctT)}"></i></div>
+      <div class="rmiss">${st.totOk} de ${st.totE} checklists entregues no período.</div>
+    </div>
+    <h2>🏆 Ranking dos responsáveis</h2>
+    ${ranking.length? `<div class="rep-setor">${ranking.map((r,i)=>`
+      <div style="margin:${i?14:0}px 0 0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <b style="font-size:14px">${i+1}º ${esc(r.nome)} <span style="color:var(--muted);font-weight:600">· ${esc(r.setor)}</span></b>
+          <span class="rpct ${clsPct(r.pct)}" style="font-size:17px">${r.pct}%</span>
+        </div>
+        <div class="rbar" style="height:9px;margin:6px 0 2px"><i style="width:${r.pct}%;background:${corPct(r.pct)}"></i></div>
+        <div class="rmiss">${r.ok}/${r.esp} entregues</div>
+      </div>`).join("")}</div>` : '<p class="sub">Sem dados no período.</p>'}
+    <h2>⏳ Em aberto</h2>
+    ${abertosOrd.length? `<div class="rep-setor">${abertosOrd.map(a=>`
+      <div class="rd-item ${a.atrasado?'no':''}" style="padding:6px 0">
+        <span class="b">${a.atrasado?"✗":"•"}</span>
+        <span><b>${esc(a.setor)}</b> · ${esc(a.nome)} — ${esc(a.resp)} <small style="color:var(--muted)">(${a.sem?"sem. de ":""}${fmtBR(a.dia)}${a.atrasado?" · atrasado":""})</small></span>
+      </div>`).join("")}</div>` : '<p class="sub">Nada em aberto no período. ✓</p>'}
+  `;
+}
+function setoresHTML(st){
+  const nomes=Object.keys(st.porSetor).sort();
+  return nomes.map(sn=>{
+    const d=st.porSetor[sn], p=d.esp?Math.round(d.ok/d.esp*100):0;
+    return `<div class="rep-setor">
+      <div class="rhead"><h3>${esc(sn)}</h3><span class="rpct ${clsPct(p)}">${p}%</span></div>
+      <div class="rbar"><i style="width:${p}%;background:${corPct(p)}"></i></div>
+      <div class="rmiss">${d.ok}/${d.esp} entregues.
+        ${d.faltas.length?`<br>Não entregues: ${d.faltas.map(f=>`<span class="chip">${f.sem?"sem. de ":""}${fmtBR(f.dia)} · ${esc(f.nome)}</span>`).join("")}`:" Tudo em dia. ✓"}
+      </div>
+    </div>`;
+  }).join("")||'<p class="sub">Sem dados no período.</p>';
+}
+const rodapeRel=()=>`<p class="sub" style="margin-top:14px">Gerado em ${fmtBRfull(hojeISO())} às ${horaAgora()}.</p>`;
+const btnPDF=(id,lb)=>`<div id="rep-actions" style="margin:4px 0 18px"><button class="btn-line" id="${id}">⬇ Baixar PDF ${lb}</button></div>`;
+
+/* ---- DIÁRIO ---- */
+async function renderRelatorioDia(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Montando o dia…</div>';
+  try{
+    const dia=repDia, hoje=hojeISO();
+    const st=await statsPeriodo(dia,dia);
+    const dow=DIAS_PT[new Date(dia+"T12:00:00").getDay()];
+    const doDia=st.insts.filter(x=>x.freq!=="semanal");
+    const lista=[...doDia];
+    st.modelos.filter(m=>m.ativo!==false&&m.freq==="diario"&&modeloValeNoDia(m,dia)&&(m.inicioEm||dia)<=dia)
+      .forEach(m=>{ if(!lista.find(x=>x.modeloId===m.id))
+        lista.push({virtual:true,modeloId:m.id,nome:m.nome,setor:m.setor,freq:"diario",
+          funcionarioUid:m.funcionarioUid,periodo:dia,limite:m.limite||"",concluidoEm:null,
+          itens:(m.itens||[]).map(i=>({...i,done:false,nc:null})),obs:""}); });
+    const setores={}; lista.forEach(x=>{ (setores[x.setor]??=[]).push(x); });
+    const nomes=Object.keys(setores).sort();
+
+    c.innerHTML=`
+      <h1 class="disp">Relatório</h1>
+      ${segRelatorio()}
+      <div class="fld"><label>Dia</label><input type="date" id="rd-data" value="${dia}" max="${hoje}"></div>
+      ${btnPDF("rd-pdf","do dia")}
+      <h2 style="margin-top:2px">Fechamento · ${dow} ${fmtBRfull(dia)}</h2>
+      ${dashboardHTML(st)}
+      <h2>Detalhe por setor</h2>
+      ${nomes.length? nomes.map(sn=>`
+        <div class="rep-setor">
+          <div class="rhead"><h3>${esc(sn)}</h3></div>
+          ${setores[sn].map(x=>`
+            <div style="margin-top:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <b style="font-size:15px">${esc(x.nome)}</b>${pillInst(x)}
+              </div>
+              <div class="meta" style="margin:2px 0 6px">${esc(st.nomeDe(x.funcionarioUid))}${x.limite?` · ${esc(x.limite)}`:""}${x.concluidoEm?` · concluído às ${esc(x.concluidoEm)}`:""}</div>
+              ${x.itens.map(i=>`
+                <div class="rd-item ${i.done?'ok':'no'}"><span class="b">${i.done?"✓":"✗"}</span><span>${esc(i.t)}${i.done&&i.doneEm?` <small style="color:var(--muted)">(${esc(i.doneEm)})</small>`:""}</span></div>
+                ${i.nc?`<div class="ncnote" style="margin:2px 0 6px 29px">⚠ ${esc(i.nc)}</div>`:""}
+              `).join("")}
+              ${x.obs?`<div class="meta" style="margin-top:6px">📝 ${esc(x.obs)}</div>`:""}
+            </div>`).join("")}
+        </div>`).join("") : '<p class="sub">Nenhum checklist previsto ou registrado nesse dia.</p>'}
+      ${rodapeRel()}
+    `;
+    ligarSeg();
+    $("rd-data").onchange=e=>{ repDia=e.target.value; renderRelatorioDia(); };
+    $("rd-pdf").onclick=()=>window.print();
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao montar o dia. Recarregue a página.</p>'; }
+}
+
+/* ---- SEMANAL (segunda a domingo) ---- */
+async function renderRelatorioSem(){
+  const c=$("tab-content"); c.innerHTML='<div class="loading">Fechando a semana…</div>';
+  try{
+    const seg=repSem, dom=addDias(seg,6);
+    const st=await statsPeriodo(seg,dom);
+    c.innerHTML=`
+      <h1 class="disp">Relatório</h1>
+      ${segRelatorio()}
+      <div class="mesnav">
+        <button id="rs-prev">‹</button>
+        <b>seg ${fmtBR(seg)} – dom ${fmtBR(dom)}</b>
+        <button id="rs-next">›</button>
+      </div>
+      ${btnPDF("rs-pdf","da semana")}
+      ${dashboardHTML(st)}
+      <h2>Setores</h2>
+      ${setoresHTML(st)}
+      ${rodapeRel()}
+    `;
+    ligarSeg();
+    $("rs-pdf").onclick=()=>window.print();
+    $("rs-prev").onclick=()=>{ repSem=addDias(repSem,-7); renderRelatorioSem(); };
+    $("rs-next").onclick=()=>{ repSem=addDias(repSem,7); renderRelatorioSem(); };
+  }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao fechar a semana. Recarregue a página.</p>'; }
+}
+
+/* ---- MENSAL ---- */
+async function renderRelatorioMes(){
   const c=$("tab-content"); c.innerHTML='<div class="loading">Fechando as contas do mês…</div>';
   try{
     const [ano,mn]=repMes.split("-").map(Number);
     const primeiro=`${repMes}-01`;
-    const ultimoDia=new Date(ano,mn,0).getDate();
-    const hoje=hojeISO();
-    const fim = repMes===hoje.slice(0,7) ? hoje : `${repMes}-${pad(ultimoDia)}`;
-
-    const qs=await getDocs(collection(db,"modelos"));
-    const modelos=qs.docs.map(d=>({id:d.id,...d.data()}));
-    const qs2=await getDocs(query(collection(db,"checklists"))); // filtrado client-side por mês
-    const insts=qs2.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.periodo>=primeiro&&x.periodo<=fim);
-
-    // esperado x entregue por setor
-    const porSetor={};
-    const add=(setor)=> porSetor[setor]??={esperado:0,entregue:0,faltas:[]};
-    for(const m of modelos){
-      const inicio = m.inicioEm || primeiro;
-      if(m.freq==="diario"){
-        for(let d=primeiro; d<=fim; d=addDias(d,1)){
-          if(d<inicio) continue;
-          if(!modeloValeNoDia(m,d)) continue;
-          if(m.ativo===false && !insts.find(x=>x.modeloId===m.id&&x.periodo===d)) continue;
-          add(m.setor); porSetor[m.setor].esperado++;
-          const inst=insts.find(x=>x.modeloId===m.id&&x.periodo===d);
-          if(inst&&inst.concluidoEm) porSetor[m.setor].entregue++;
-          else if(d<hoje) porSetor[m.setor].faltas.push({dia:d,nome:m.nome});
-        }
-      }else{ // semanal — semanas cujo início cai no mês visível
-        for(let s=semanaKey(new Date(primeiro+"T12:00:00")); s<=fim; s=addDias(s,7)){
-          if(s<primeiro&&addDias(s,6)<primeiro) continue;
-          if(s<inicio) continue;
-          add(m.setor); porSetor[m.setor].esperado++;
-          const inst=insts.find(x=>x.modeloId===m.id&&x.periodo===s);
-          if(inst&&inst.concluidoEm) porSetor[m.setor].entregue++;
-          else if(addDias(s,6)<hoje) porSetor[m.setor].faltas.push({dia:s,nome:m.nome,sem:true});
-        }
-      }
-    }
-    // avulsas
-    insts.filter(x=>x.freq==="avulso").forEach(x=>{
-      add(x.setor); porSetor[x.setor].esperado++;
-      if(x.concluidoEm) porSetor[x.setor].entregue++;
-      else if(x.periodo<hoje) porSetor[x.setor].faltas.push({dia:x.periodo,nome:x.nome});
-    });
-
-    const setores=Object.keys(porSetor).sort();
-    const totE=setores.reduce((a,s)=>a+porSetor[s].esperado,0);
-    const totOk=setores.reduce((a,s)=>a+porSetor[s].entregue,0);
-    const pctT= totE?Math.round(totOk/totE*100):0;
-    const cls=p=> p>=90?"g":(p>=70?"a":"r");
-    const cor=p=> p>=90?"var(--green)":(p>=70?"var(--amber)":"var(--red)");
-
+    const ultimo=`${repMes}-${pad(new Date(ano,mn,0).getDate())}`;
+    const st=await statsPeriodo(primeiro,ultimo);
     c.innerHTML=`
-      <h1 class="disp">Relatório mensal</h1>
+      <h1 class="disp">Relatório</h1>
+      ${segRelatorio()}
       <div class="mesnav">
         <button id="rep-prev">‹</button>
         <b>${MESES[mn-1]} ${ano}</b>
         <button id="rep-next">›</button>
       </div>
-      <div class="rep-setor" style="border-color:var(--dark)">
-        <div class="rhead"><h3>Casa toda</h3><span class="rpct ${cls(pctT)}">${pctT}%</span></div>
-        <div class="rbar"><i style="width:${pctT}%;background:${cor(pctT)}"></i></div>
-        <div class="rmiss">${totOk} de ${totE} checklists entregues no mês.</div>
-      </div>
-      ${setores.map(s=>{
-        const d=porSetor[s], p=d.esperado?Math.round(d.entregue/d.esperado*100):0;
-        return `<div class="rep-setor">
-          <div class="rhead"><h3>${esc(s)}</h3><span class="rpct ${cls(p)}">${p}%</span></div>
-          <div class="rbar"><i style="width:${p}%;background:${cor(p)}"></i></div>
-          <div class="rmiss">${d.entregue}/${d.esperado} entregues.
-            ${d.faltas.length?`<br>Não entregues: ${d.faltas.map(f=>`<span class="chip">${f.sem?"sem. de ":""}${fmtBR(f.dia)} · ${esc(f.nome)}</span>`).join("")}`:" Tudo em dia. ✓"}
-          </div>
-        </div>`;
-      }).join("")||'<p class="sub">Sem dados nesse mês.</p>'}
-      <p class="sub" style="margin-top:14px">Gerado em ${fmtBRfull(hoje)} às ${horaAgora()}. Para guardar: menu do navegador → Imprimir → Salvar como PDF.</p>
+      ${btnPDF("rm-pdf","do mês")}
+      ${dashboardHTML(st)}
+      <h2>Setores</h2>
+      ${setoresHTML(st)}
+      ${rodapeRel()}
     `;
-    $("rep-prev").onclick=()=>{ const d=new Date(ano,mn-2,1); repMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`; renderRelatorio(); };
-    $("rep-next").onclick=()=>{ const d=new Date(ano,mn,1); repMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`; renderRelatorio(); };
+    ligarSeg();
+    $("rm-pdf").onclick=()=>window.print();
+    $("rep-prev").onclick=()=>{ const d=new Date(ano,mn-2,1); repMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`; renderRelatorioMes(); };
+    $("rep-next").onclick=()=>{ const d=new Date(ano,mn,1); repMes=`${d.getFullYear()}-${pad(d.getMonth()+1)}`; renderRelatorioMes(); };
   }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao montar o relatório. Recarregue a página.</p>'; }
 }
 </script>
