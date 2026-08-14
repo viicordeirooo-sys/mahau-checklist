@@ -506,12 +506,21 @@ async function renderPainel(){
 
     const ncs=[]; tudo.forEach(x=>x.itens.forEach(i=>{ if(i.nc) ncs.push({s:x.setor,c:x.nome,t:i.nc}); }));
 
+    let expSeq=0;
     const cardG=x=>{
       const ncn=x.itens.filter(i=>i.nc).length;
-      return `<div class="card">
+      const eid="exp"+(expSeq++);
+      return `<div class="card tap" data-exp="${eid}">
         <div class="row"><h3>${esc(x.setor)} — ${esc(x.nome)}</h3>${pillInst(x)}</div>
-        <div class="meta">${esc(nomeDe(x.funcionarioUid))} · ${x.freq==="semanal"?labelSemana(x.periodo):"hoje"} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${ncn?` · <span class="pill nc">⚠ ${ncn}</span>`:""}</div>
+        <div class="meta">${esc(nomeDe(x.funcionarioUid))} · ${x.freq==="semanal"?labelSemana(x.periodo):"hoje"} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${ncn?` · <span class="pill nc">⚠ ${ncn}</span>`:""} · <span style="color:#9aa3ad">toque p/ abrir</span></div>
         <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
+        <div class="hidden" id="${eid}" style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">
+          ${x.itens.map(i=>`
+            <div class="rd-item ${i.done?'ok':'no'}"><span class="b">${i.done?"✓":"✗"}</span><span>${esc(i.t)}${i.done&&i.doneEm?` <small style="color:var(--muted)">(${esc(i.doneEm)})</small>`:""}</span></div>
+            ${i.nc?`<div class="ncnote" style="margin:2px 0 6px 29px">⚠ ${esc(i.nc)}</div>`:""}
+          `).join("")}
+          ${x.concluidoEm?`<div class="meta" style="margin-top:6px">✓ Concluído às ${esc(x.concluidoEm)}</div>`:""}
+        </div>
         ${x.obs?`<div class="meta" style="margin-top:9px">📝 ${esc(x.obs)}</div>`:""}
       </div>`;
     };
@@ -531,10 +540,12 @@ async function renderPainel(){
       ${listaDia.map(cardG).join("")||'<p class="sub">Nenhum checklist diário cadastrado ainda.</p>'}
       <h2>Semana (${labelSemana(seg)})</h2>
       ${listaSem.map(cardG).join("")||'<p class="sub">Nenhum checklist semanal cadastrado ainda.</p>'}
-      ${me.papel==="gerencia"?`<div style="margin-top:22px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-line" id="btn-avulsa">+ Lançar tarefa avulsa</button><button class="btn-line" id="btn-backup">⬇ Exportar backup (JSON)</button></div>`:""}
+      ${me.papel==="gerencia"?`<div style="margin-top:22px"><button class="btn-line" id="btn-avulsa">+ Lançar tarefa avulsa</button></div>`:""}
+      ${me.papel==="socio"?`<div style="margin-top:22px"><button class="btn-line" id="btn-backup">⬇ Exportar backup (JSON)</button></div>`:""}
     `;
     const ba=$("btn-avulsa"); if(ba) ba.onclick=formAvulsa;
     const bb=$("btn-backup"); if(bb) bb.onclick=exportarBackup;
+    c.querySelectorAll("[data-exp]").forEach(el=> el.onclick=()=>{ $(el.dataset.exp).classList.toggle("hidden"); });
   }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar o painel. Recarregue a página.</p>'; }
 }
 
