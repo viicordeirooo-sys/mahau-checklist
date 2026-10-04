@@ -196,7 +196,8 @@ const POP_CAIXA = [
   ["Palms e maquininhas","Conferir se estão carregados e entregar para a equipe."],
   ["Sistema de notas","Fazer login e deixar operando."],
   ["Chapelaria","Organizar a chapelaria para a abertura."],
-  ["Fundo de troco","Conferir o valor do fundo de troco."]
+  ["Fundo de troco","Conferir o valor do fundo de troco."],
+  ["Ir jantar / Descanso","Pausa para jantar e descanso antes da abertura da casa."]
 ];
 const POP_PONTO = {id:"pop0", t:"Bater o ponto", desc:"Registrar o ponto de entrada antes de começar a abertura do caixa."};
 const popCaixaItens = () => [ {...POP_PONTO}, ...POP_CAIXA.map(([t,d],i)=>({id:"pop"+(i+1), t, desc:d})) ];
@@ -204,14 +205,23 @@ const popCaixaItens = () => [ {...POP_PONTO}, ...POP_CAIXA.map(([t,d],i)=>({id:"
 /* atualização automática: POP do Caixa já existente ganha "Bater o ponto" como item 1 (roda quando a gerência entra) */
 async function migrarPopCaixa(){
   try{
+    const JANTAR = { id:"pop13", t:"Ir jantar / Descanso", desc:"Pausa para jantar e descanso antes da abertura da casa." };
     const qs=await getDocs(query(collection(db,"modelos"), where("setor","==","Caixa")));
     for(const d of qs.docs){
       const m=d.data();
       if(m.ativo===false || m.nome!==POP_CAIXA_NOME) continue;
-      const itens=m.itens||[];
-      if(itens.some(i=>i.id==="pop0" || (i.t||"").toLowerCase().includes("ponto"))) continue;
-      await updateDoc(doc(db,"modelos",d.id),{ itens:[{...POP_PONTO}, ...itens], atualizadoEm:serverTimestamp() });
-      audit("modelo_editado", `${POP_CAIXA_NOME}: + Bater o ponto (item 1)`);
+      let itens=[...(m.itens||[])], mudou=[];
+      if(!itens.some(i=>i.id==="pop0" || (i.t||"").toLowerCase().includes("ponto"))){
+        itens=[{...POP_PONTO}, ...itens]; mudou.push("Bater o ponto");
+      }
+      if(!itens.some(i=>i.id==="pop13" || (i.t||"").toLowerCase().includes("jantar"))){
+        const ix=itens.findIndex(i=>i.id==="pop12" || (i.t||"").toLowerCase().includes("fundo de troco"));
+        if(ix>=0) itens.splice(ix+1,0,{...JANTAR}); else itens.push({...JANTAR});
+        mudou.push("Ir jantar / Descanso");
+      }
+      if(!mudou.length) continue;
+      await updateDoc(doc(db,"modelos",d.id),{ itens, atualizadoEm:serverTimestamp() });
+      audit("modelo_editado", `${POP_CAIXA_NOME}: + ${mudou.join(", ")}`);
     }
   }catch(e){ console.error("migrarPopCaixa", e); }
 }
