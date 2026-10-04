@@ -195,7 +195,23 @@ const POP_CAIXA = [
   ["Chapelaria","Organizar a chapelaria para a abertura."],
   ["Fundo de troco","Conferir o valor do fundo de troco."]
 ];
-const popCaixaItens = () => POP_CAIXA.map(([t,d],i)=>({id:"pop"+(i+1), t, desc:d}));
+const POP_PONTO = {id:"pop0", t:"Bater o ponto", desc:"Registrar o ponto de entrada antes de começar a abertura do caixa."};
+const popCaixaItens = () => [ {...POP_PONTO}, ...POP_CAIXA.map(([t,d],i)=>({id:"pop"+(i+1), t, desc:d})) ];
+
+/* atualização automática: POP do Caixa já existente ganha "Bater o ponto" como item 1 (roda quando a gerência entra) */
+async function migrarPopCaixa(){
+  try{
+    const qs=await getDocs(query(collection(db,"modelos"), where("setor","==","Caixa")));
+    for(const d of qs.docs){
+      const m=d.data();
+      if(m.ativo===false || m.nome!==POP_CAIXA_NOME) continue;
+      const itens=m.itens||[];
+      if(itens.some(i=>i.id==="pop0" || (i.t||"").toLowerCase().includes("ponto"))) continue;
+      await updateDoc(doc(db,"modelos",d.id),{ itens:[{...POP_PONTO}, ...itens], atualizadoEm:serverTimestamp() });
+      audit("modelo_editado", `${POP_CAIXA_NOME}: + Bater o ponto (item 1)`);
+    }
+  }catch(e){ console.error("migrarPopCaixa", e); }
+}
 const diasDefault = setor => SETORES_SEG_SEX.includes(setor) ? [1,2,3,4,5] : [4,5,6,0];
 const modeloValeNoDia = (m, iso) => (!m.dias || !m.dias.length) ? true : m.dias.includes(new Date(iso+"T12:00:00").getDay());
 
@@ -291,6 +307,7 @@ function entrarApp(){
   $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
   montarTabs();
   irTab(me.papel==="funcionario" ? "minhas" : "painel");
+  if(me.papel==="gerencia") migrarPopCaixa();
 }
 
 /* ---------- tabs ---------- */
@@ -683,17 +700,23 @@ async function renderControleFunc(uid, modo){
         <button data-m="mes" class="${modo==='mes'?'on':''}">Mês</button>
       </div>
       <p class="sub">${titulo}</p>
-      ${lista.map(x=>`
-        <div class="card">
+      ${lista.map((x,xi)=>`
+        <div class="card tap" data-cexp="cx${xi}">
           <div class="row"><h3>${esc(x.nome)}</h3>${pillInst(x)}</div>
-          <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):fmtBR(x.periodo)} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${x.concluidoEm?` · ✓ ${esc(x.concluidoEm)}`:""}${x.itens.some(i=>i.nc)?' · <span class="pill nc">⚠ problema</span>':""}</div>
+          <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):fmtBR(x.periodo)} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens${x.concluidoEm?` · ✓ ${esc(x.concluidoEm)}`:""}${x.itens.some(i=>i.nc)?' · <span class="pill nc">⚠ problema</span>':""} · <span style="color:#9aa3ad">toque p/ abrir</span></div>
           <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
+          <div class="hidden" id="cx${xi}" style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">
+            ${x.itens.map(i=>`
+              <div class="rd-item ${i.done?'ok':'no'}"><span class="b">${i.done?"✓":"✗"}</span><span>${esc(i.t)}${i.done&&i.doneEm?` <small style="color:var(--muted)">(${esc(i.doneEm)})</small>`:""}${i.desc?`<br><small style="color:var(--muted)">${esc(i.desc)}</small>`:""}</span></div>
+            `).join("")}
+          </div>
           ${x.obs?`<div class="meta" style="margin-top:9px">📝 ${esc(x.obs)}</div>`:""}
           ${x.itens.filter(i=>i.nc).map(i=>`<div class="ncnote" style="margin:10px 0 0">⚠ ${esc(i.t)}: ${esc(i.nc)}</div>`).join("")}
         </div>`).join("")||'<p class="sub">Nada registrado nesse período.</p>'}
     `;
     $("cf-back").onclick=()=>irTab("func");
     c.querySelectorAll("[data-m]").forEach(b=> b.onclick=()=>renderControleFunc(uid,b.dataset.m));
+    c.querySelectorAll("[data-cexp]").forEach(el=> el.onclick=()=>{ $(el.dataset.cexp).classList.toggle("hidden"); });
     const ct=$("cf-toggle"); if(ct) ct.onclick=async()=>{
       const novo = u.ativo===false;
       if(!confirm(novo?`Reativar o acesso de ${u.nome}?`:`Desativar o acesso de ${u.nome}? A pessoa não consegue mais entrar (o histórico fica guardado).`)) return;
