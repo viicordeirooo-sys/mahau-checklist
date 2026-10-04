@@ -183,7 +183,8 @@ const SETORES_SEG_SEX = ["Manutenção","Compras","Financeiro"];
 const CARGOS = ["Responsável","Barman","Atendente","Hostess"];
 const cargoDe = u => u.cargo || "Responsável";
 const rotuloFunc = u => cargoDe(u)==="Responsável" ? `Resp. ${u.setor}` : `${cargoDe(u)} · ${u.setor}`;
-const POP_CAIXA_NOME = "Abertura do Caixa (POP)";
+const POP_CAIXA_NOME = "Abre · Caixa (POP)";
+const POP_CAIXA_LEGADO = "Abertura do Caixa (POP)";
 const POP_CAIXA = [
   ["Abrir o sistema","Ler a primeira comanda ZIG da noite — o sistema da casa abre automaticamente."],
   ["Comanda Camarim","Se tiver MC, cantor ou banda: abrir no nome do produtor/responsável, colocar consumação/bônus padrão de R$800,00 e TRAVAR o limite (salvo outra negociação)."],
@@ -202,6 +203,48 @@ const POP_CAIXA = [
 const POP_PONTO = {id:"pop0", t:"Bater o ponto", desc:"Registrar o ponto de entrada antes de começar a abertura do caixa."};
 const popCaixaItens = () => [ {...POP_PONTO}, ...POP_CAIXA.map(([t,d],i)=>({id:"pop"+(i+1), t, desc:d})) ];
 
+const POP_PORTARIA_ABRE_NOME = "Abre · Portaria (POP)";
+const POP_PORTARIA_ABRE = [
+  ["Separar máquinas da portaria","Máquinas das hostess."],
+  ["Separar comandas",""],
+  ["Separar pulseiras",""],
+  ["Separar pastas",""],
+  ["Conferir se as máquinas estão carregadas",""],
+  ["Pegar rádios (HT) da portaria",""],
+  ["Separar itens da segurança","Lata, HT, Palm e listagem."]
+];
+const popPortariaAbreItens = () => POP_PORTARIA_ABRE.map(([t,d],i)=>({id:"pab"+(i+1), t, desc:d}));
+
+/* POPs pré-programados: quem é do setor já nasce com eles (e quem já existe recebe quando a gerência entra) */
+const POPS = [
+  { setor:"Caixa",    nome:POP_CAIXA_NOME,         legado:[POP_CAIXA_LEGADO], turno:"abre", itens:popCaixaItens },
+  { setor:"Portaria", nome:POP_PORTARIA_ABRE_NOME, legado:[],                 turno:"abre", itens:popPortariaAbreItens },
+];
+const TURNO_ORD = { abre:0, fecha:1 };
+const ordTurno = x => (x.turno in TURNO_ORD) ? TURNO_ORD[x.turno] : 2;
+async function criarPop(pop, uid, nome){
+  await addDoc(collection(db,"modelos"),{ nome:pop.nome, setor:pop.setor, freq:"diario", limite:"", turno:pop.turno,
+    dias:diasDefault(pop.setor), funcionarioUid:uid, funcionarioNome:nome, itens:pop.itens(),
+    ativo:true, inicioEm:hojeISO(), criadoEm:serverTimestamp(), atualizadoEm:serverTimestamp() });
+  audit("modelo_criado", `${pop.nome} → ${nome}`);
+}
+async function garantirPops(){
+  try{
+    cacheUsuarios=[];
+    const users=(await getUsuarios()).filter(u=>u.papel==="funcionario" && u.ativo!==false && !u.excluido);
+    const qs=await getDocs(collection(db,"modelos"));
+    const mods=qs.docs.map(d=>d.data());
+    for(const u of users){
+      for(const pop of POPS.filter(p=>p.setor===u.setor)){
+        const nomes=[pop.nome, ...pop.legado];
+        // já teve esse POP alguma vez (mesmo desativado pela gerência)? então não recria
+        if(mods.some(m=>m.funcionarioUid===u.uid && nomes.includes(m.nome))) continue;
+        await criarPop(pop, u.uid, u.nome);
+      }
+    }
+  }catch(e){ console.error("garantirPops", e); }
+}
+
 /* atualização automática: POP do Caixa já existente ganha "Bater o ponto" como item 1 (roda quando a gerência entra) */
 async function migrarPopCaixa(){
   try{
@@ -209,8 +252,10 @@ async function migrarPopCaixa(){
     const qs=await getDocs(query(collection(db,"modelos"), where("setor","==","Caixa")));
     for(const d of qs.docs){
       const m=d.data();
-      if(m.ativo===false || m.nome!==POP_CAIXA_NOME) continue;
+      if(m.ativo===false || (m.nome!==POP_CAIXA_NOME && m.nome!==POP_CAIXA_LEGADO)) continue;
       let itens=[...(m.itens||[])], mudou=[];
+      if(m.nome!==POP_CAIXA_NOME) mudou.push("nome");
+      if(m.turno!=="abre") mudou.push("turno Abre");
       if(!itens.some(i=>i.id==="pop0" || (i.t||"").toLowerCase().includes("ponto"))){
         itens=[{...POP_PONTO}, ...itens]; mudou.push("Bater o ponto");
       }
@@ -220,8 +265,8 @@ async function migrarPopCaixa(){
         mudou.push("Ir jantar / Descanso");
       }
       if(!mudou.length) continue;
-      await updateDoc(doc(db,"modelos",d.id),{ itens, atualizadoEm:serverTimestamp() });
-      await syncInstanciasAbertas(d.id, itens);
+      await updateDoc(doc(db,"modelos",d.id),{ itens, nome:POP_CAIXA_NOME, turno:"abre", atualizadoEm:serverTimestamp() });
+      await syncInstanciasAbertas(d.id, { itens, nome:POP_CAIXA_NOME, turno:"abre" });
       audit("modelo_editado", `${POP_CAIXA_NOME}: + ${mudou.join(", ")}`);
     }
   }catch(e){ console.error("migrarPopCaixa", e); }
@@ -322,7 +367,7 @@ function entrarApp(){
   $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
   montarTabs();
   irTab(me.papel==="funcionario" ? "minhas" : "painel");
-  if(me.papel==="gerencia") migrarPopCaixa();
+  if(me.papel==="gerencia") migrarPopCaixa().then(garantirPops);
 }
 
 /* ---------- tabs ---------- */
@@ -436,14 +481,22 @@ const mudouItens=(a,b)=>JSON.stringify(a)!==JSON.stringify(b);
 const aindaAberto=x=> !x.concluidoEm && (!x.editavelAte || !x.editavelAte.toDate || x.editavelAte.toDate()>new Date());
 
 /* gerência: aplica o modelo editado nos checklists em andamento */
-async function syncInstanciasAbertas(modeloId, itensModelo){
+function patchInstancia(x, m){
+  const p={};
+  const novos=mesclarItens(x.itens, m.itens);
+  if(mudouItens(novos,x.itens)) p.itens=novos;
+  if(m.nome && x.nome!==m.nome) p.nome=m.nome;
+  if((x.turno||"")!==(m.turno||"")) p.turno=m.turno||"";
+  return p;
+}
+async function syncInstanciasAbertas(modeloId, m){
   try{
     const qs=await getDocs(query(collection(db,"checklists"), where("modeloId","==",modeloId)));
     for(const d of qs.docs){
       const x=d.data();
       if(!aindaAberto(x)) continue;
-      const novos=mesclarItens(x.itens, itensModelo);
-      if(mudouItens(novos,x.itens)) await updateDoc(doc(db,"checklists",d.id),{ itens:novos });
+      const p=patchInstancia(x, m);
+      if(Object.keys(p).length) await updateDoc(doc(db,"checklists",d.id),p);
     }
   }catch(e){ console.error("syncInstanciasAbertas", e); }
 }
@@ -461,7 +514,7 @@ async function gerarMinhasInstancias(){
       await setDoc(ref,{
         modeloId:m.id, nome:m.nome, setor:m.setor, freq:m.freq,
         funcionarioUid:me.uid, funcionarioNome:me.nome,
-        periodo, limite:m.limite||"", concluidoEm:null, obs:"",
+        periodo, limite:m.limite||"", turno:m.turno||"", concluidoEm:null, obs:"",
         editavelAte: Timestamp.fromDate(limiteEdicao(m.freq,periodo)),
         itens: (m.itens||[]).map(i=>({id:i.id, t:i.t, desc:i.desc||"", done:false, doneEm:null, nc:null})),
         criadoEm: serverTimestamp()
@@ -469,8 +522,8 @@ async function gerarMinhasInstancias(){
     }else{
       const x=snap.data();
       if(aindaAberto(x)){
-        const novos=mesclarItens(x.itens, m.itens);
-        if(mudouItens(novos,x.itens)){ try{ await updateDoc(ref,{ itens:novos }); }catch(e){ console.error(e); } }
+        const p=patchInstancia(x, m);
+        if(Object.keys(p).length){ try{ await updateDoc(ref,p); }catch(e){ console.error(e); } }
       }
     }
   }
@@ -485,12 +538,15 @@ async function renderMinhas(){
     const todas = await getChecklists({funcionarioUid: me.uid});
     const doDia    = todas.filter(x=>x.freq!=="semanal" && x.periodo===hoje);
     const daSemana = todas.filter(x=>x.freq==="semanal" && x.periodo===seg);
-    const atrasadas= todas.filter(x=>!x.concluidoEm && periodoEncerrado(x));
+    const atrasadas= todas.filter(x=>!entregue(x) && periodoEncerrado(x) && !(x.editavelAte&&x.editavelAte.toDate&&x.editavelAte.toDate()<new Date()));
+    const dAbre  = doDia.filter(x=>x.turno==="abre");
+    const dFecha = doDia.filter(x=>x.turno==="fecha");
+    const dOutro = doDia.filter(x=>x.turno!=="abre" && x.turno!=="fecha");
 
     const bloco=(lista)=> lista.map(x=>`
       <div class="card tap" data-open="${x.id}">
         <div class="row"><h3>${esc(x.nome)}</h3>${pillInst(x)}</div>
-        <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBR(x.periodo):"hoje")} · ${x.itens.filter(i=>i.done).length}/${x.itens.length} itens</div>
+        <div class="meta">${x.freq==="semanal"?labelSemana(x.periodo):(x.freq==="avulso"?"Tarefa avulsa · "+fmtBR(x.periodo):"hoje")} · concluiu ${x.itens.filter(i=>i.done).length} de ${x.itens.length} tarefas</div>
         <div class="bar"><i class="${statusInst(x)==='late'?'late':''}" style="width:${pctInst(x)}%"></i></div>
         ${faltaHTML(x)}
       </div>`).join("") || '<p class="sub">Nada por aqui.</p>';
@@ -500,7 +556,11 @@ async function renderMinhas(){
       <h1 class="disp">Hoje · ${DIAS_PT[agoraOp().getDay()]} ${fmtBR(hoje)}</h1>
       <p class="sub">Toque numa tarefa para preencher.</p>
       ${atrasadas.length?`<h2>⚠ Atrasadas</h2>${bloco(atrasadas)}`:""}
-      <h2>Do dia</h2>${bloco(doDia)}
+      ${(dAbre.length||dFecha.length) ? `
+        <h2>🔓 Abre</h2>${dAbre.length?bloco(dAbre):'<p class="sub">Sem checklist de abre hoje.</p>'}
+        <h2>🔒 Fecha</h2>${dFecha.length?bloco(dFecha):'<p class="sub">Sem checklist de fecha hoje.</p>'}
+        ${dOutro.length?`<h2>Outras do dia</h2>${bloco(dOutro)}`:""}
+      ` : `<h2>Do dia</h2>${bloco(doDia)}`}
       <h2>Da semana (${labelSemana(seg)})</h2>${bloco(daSemana)}
     `;
     c.querySelectorAll("[data-open]").forEach(el=> el.onclick=()=>abrirExec(el.dataset.open));
@@ -600,11 +660,12 @@ async function renderPainel(){
     const nomeDe = uid => (users.find(u=>u.uid===uid)||{}).nome || "—";
 
     // instâncias reais + esperadas (modelo ainda sem instância = não iniciado)
-    const virt=(m,periodo)=>({ id:"virt_"+m.id, virtual:true, modeloId:m.id, nome:m.nome, setor:m.setor, freq:m.freq,
+    const virt=(m,periodo)=>({ id:"virt_"+m.id, virtual:true, modeloId:m.id, nome:m.nome, setor:m.setor, freq:m.freq, turno:m.turno||"",
       funcionarioUid:m.funcionarioUid, periodo, limite:m.limite||"", concluidoEm:null,
       itens:(m.itens||[]).map(i=>({...i,done:false,nc:null})) });
     const listaDia = modelos.filter(m=>m.freq==="diario" && modeloValeNoDia(m,hoje) && (m.inicioEm||hoje)<=hoje).map(m=> doDia.find(x=>x.modeloId===m.id) || virt(m,hoje));
     doDia.filter(x=>x.freq==="avulso").forEach(x=>listaDia.push(x));
+    listaDia.sort((a,b)=> a.setor.localeCompare(b.setor) || ordTurno(a)-ordTurno(b) || a.nome.localeCompare(b.nome));
     const listaSem = modelos.filter(m=>m.freq==="semanal").map(m=> daSemana.find(x=>x.modeloId===m.id) || virt(m,seg));
 
     const tudo=[...listaDia,...listaSem];
@@ -874,12 +935,10 @@ function formNovoUsuario(){
       await signOut(auth2);
       audit("usuario_criado", `${nome} (${cargo||papel} · ${setor})`);
       let extra="";
-      if(papel==="funcionario" && setor==="Caixa"){
-        await addDoc(collection(db,"modelos"),{ nome:POP_CAIXA_NOME, setor:"Caixa", freq:"diario", limite:"",
-          dias:diasDefault("Caixa"), funcionarioUid:cred.user.uid, funcionarioNome:nome, itens:popCaixaItens(),
-          ativo:true, inicioEm:hojeISO(), criadoEm:serverTimestamp(), atualizadoEm:serverTimestamp() });
-        audit("modelo_criado", `${POP_CAIXA_NOME} → ${nome}`);
-        extra=" + POP do Caixa lançado";
+      if(papel==="funcionario"){
+        const pops=POPS.filter(p=>p.setor===setor);
+        for(const pop of pops) await criarPop(pop, cred.user.uid, nome);
+        if(pops.length) extra=` + ${pops.map(p=>p.nome).join(" e ")} lançado`;
       }
       cacheUsuarios=[]; toast("Acesso criado"+extra); irTab("func");
     }catch(e){
@@ -916,7 +975,7 @@ async function renderModelos(){
 let edM=null; // modelo em edição
 async function editorModelo(m){
   const users=(await getUsuarios()).filter(u=>u.papel!=="socio"&&u.ativo!==false);
-  edM = m ? JSON.parse(JSON.stringify(m)) : { nome:"", setor:SETORES[0], freq:"diario", limite:"", funcionarioUid:users[0]?.uid||"", itens:[], ativo:true, dias:diasDefault(SETORES[0]) };
+  edM = m ? JSON.parse(JSON.stringify(m)) : { nome:"", setor:SETORES[0], freq:"diario", limite:"", turno:"abre", funcionarioUid:users[0]?.uid||"", itens:[], ativo:true, dias:diasDefault(SETORES[0]) };
   if(!edM.dias) edM.dias = diasDefault(edM.setor);
   desenharEditor(users);
 }
@@ -928,6 +987,11 @@ function desenharEditor(users){
     <div class="fld"><label>Nome do checklist</label><input id="em-nome" value="${esc(edM.nome)}" placeholder="Ex.: Abertura do bar"></div>
     <div class="fld"><label>Setor</label><select id="em-setor">${SETORES.map(s=>`<option ${s===edM.setor?"selected":""}>${s}</option>`).join("")}</select></div>
     <div class="fld"><label>Responsável</label><select id="em-func">${users.map(u=>`<option value="${u.uid}" ${u.uid===edM.funcionarioUid?"selected":""}>${esc(u.nome)} · ${esc(u.papel==="funcionario"?rotuloFunc(u):"Gerência")}</option>`).join("")}</select></div>
+    <div class="fld"><label>Turno</label><select id="em-turno">
+      <option value="abre" ${edM.turno==="abre"?"selected":""}>🔓 Abre</option>
+      <option value="fecha" ${edM.turno==="fecha"?"selected":""}>🔒 Fecha</option>
+      <option value="" ${!edM.turno?"selected":""}>Outro (sem turno)</option>
+    </select></div>
     <div class="fld"><label>Frequência</label><select id="em-freq">
       <option value="diario" ${edM.freq==="diario"?"selected":""}>Diário</option>
       <option value="semanal" ${edM.freq==="semanal"?"selected":""}>Semanal</option>
@@ -937,7 +1001,7 @@ function desenharEditor(users){
         ${[1,2,3,4,5,6,0].map(d=>`<button type="button" class="btn-sm" data-dia="${d}" style="${edM.dias.includes(d)?'border-color:var(--dark);color:var(--ink);font-weight:800':''}">${DIAS_LB[d]}</button>`).join("")}
       </div>
     </div>
-    ${edM.setor==="Caixa" && !edM.itens.length ? `<div style="margin:6px 0 4px"><button class="btn-line" id="em-pop">📋 Carregar POP de abertura do Caixa</button></div>` : ""}
+    ${!edM.itens.length ? POPS.filter(p=>p.setor===edM.setor).map((p,pi)=>`<div style="margin:6px 0 4px"><button class="btn-line" data-pop="${POPS.indexOf(p)}">📋 Carregar ${esc(p.nome)}</button></div>`).join("") : ""}
     <h2>Itens (${edM.itens.length})</h2>
     ${edM.itens.map((i,ix)=>`
       <div class="mi-row">
@@ -956,7 +1020,7 @@ function desenharEditor(users){
     sync(); desenharEditor(users);
   });
   $("em-setor").onchange=()=>{ edM.dias=diasDefault($("em-setor").value); sync(); desenharEditor(users); };
-  const ep=$("em-pop"); if(ep) ep.onclick=()=>{ sync(); edM.itens=popCaixaItens(); if(!edM.nome.trim()) edM.nome=POP_CAIXA_NOME; desenharEditor(users); };
+  c.querySelectorAll("[data-pop]").forEach(b=> b.onclick=()=>{ sync(); const p=POPS[+b.dataset.pop]; edM.itens=p.itens(); edM.turno=p.turno; if(!edM.nome.trim()) edM.nome=p.nome; desenharEditor(users); });
   $("em-freq").onchange=()=>{ sync(); desenharEditor(users); };
   $("em-add").onclick=()=>{
     const t=prompt("Item (o que fazer):"); if(!t) return;
@@ -971,17 +1035,17 @@ function desenharEditor(users){
     const d=prompt("Descrição exata (opcional):",i.desc||""); if(d!==null) i.desc=d.trim();
     sync(); desenharEditor(users);
   });
-  function sync(){ edM.nome=$("em-nome").value; edM.setor=$("em-setor").value; edM.funcionarioUid=$("em-func").value; edM.freq=$("em-freq").value; }
+  function sync(){ edM.nome=$("em-nome").value; edM.setor=$("em-setor").value; edM.funcionarioUid=$("em-func").value; edM.freq=$("em-freq").value; edM.turno=$("em-turno").value; }
   $("em-salvar").onclick=async()=>{
     sync();
     if(!edM.nome.trim()||!edM.itens.length){ toast("Dê um nome e adicione pelo menos 1 item."); return; }
     if(edM.freq==="diario" && !edM.dias.length){ toast("Marque pelo menos 1 dia da semana."); return; }
     const u=users.find(x=>x.uid===edM.funcionarioUid);
     const dados={ nome:edM.nome.trim(), setor:edM.setor, freq:edM.freq, limite:"",
-      dias:edM.dias, funcionarioUid:edM.funcionarioUid, funcionarioNome:u?.nome||"", itens:edM.itens, ativo:true,
+      dias:edM.dias, turno:edM.turno||"", funcionarioUid:edM.funcionarioUid, funcionarioNome:u?.nome||"", itens:edM.itens, ativo:true,
       inicioEm: edM.inicioEm || hojeISO(), atualizadoEm:serverTimestamp() };
     try{
-      if(edM.id){ await updateDoc(doc(db,"modelos",edM.id),dados); audit("modelo_editado",edM.nome); await syncInstanciasAbertas(edM.id, dados.itens); }
+      if(edM.id){ await updateDoc(doc(db,"modelos",edM.id),dados); audit("modelo_editado",edM.nome); await syncInstanciasAbertas(edM.id, dados); }
       else{ await addDoc(collection(db,"modelos"),{...dados,criadoEm:serverTimestamp()}); audit("modelo_criado",edM.nome); }
       toast("Modelo salvo"); irTab("modelos");
     }catch(e){ console.error(e); toast("Erro ao salvar. Tente de novo."); }
