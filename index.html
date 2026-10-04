@@ -180,6 +180,22 @@ const firebaseConfig = {
 const SETORES = ["Bar","Limpeza","Salão","Caixa","Portaria","Manutenção","Compras","Financeiro","Gerência"];
 const DIAS_LB = ["dom","seg","ter","qua","qui","sex","sáb"];
 const SETORES_SEG_SEX = ["Manutenção","Compras","Financeiro"];
+const POP_CAIXA_NOME = "Abertura do Caixa (POP)";
+const POP_CAIXA = [
+  ["Abrir o sistema","Ler a primeira comanda ZIG da noite — o sistema da casa abre automaticamente."],
+  ["Comanda Camarim","Se tiver MC, cantor ou banda: abrir no nome do produtor/responsável, colocar consumação/bônus padrão de R$800,00 e TRAVAR o limite (salvo outra negociação)."],
+  ["Comanda Cortesia da Casa","Para quebra, reposição de drink e/ou uso gerencial."],
+  ["Comanda de Funcionários","Comanda única para lançar itens de funcionários. Não abrir comanda no nome de funcionário."],
+  ["Comanda Policial","Para lançamento de itens dos policiais / viaturas da área."],
+  ["Comandas VNH","Para o caixa, garçons do salão e camarotes que pagam na hora: convidados sem comanda própria, rateios de drinks, combos e barcas."],
+  ["Regra de documentos","Só abrir comanda com documento ORIGINAL com foto ou app oficial do governo (RG, CNH, Passaporte e afins). Foto de documento NÃO vale."],
+  ["Login nos totens",""],
+  ["Palms e maquininhas","Conferir se estão carregados e entregar para a equipe."],
+  ["Sistema de notas","Fazer login e deixar operando."],
+  ["Chapelaria","Organizar a chapelaria para a abertura."],
+  ["Fundo de troco","Conferir o valor do fundo de troco."]
+];
+const popCaixaItens = () => POP_CAIXA.map(([t,d],i)=>({id:"pop"+(i+1), t, desc:d}));
 const diasDefault = setor => SETORES_SEG_SEX.includes(setor) ? [1,2,3,4,5] : [4,5,6,0];
 const modeloValeNoDia = (m, iso) => (!m.dias || !m.dias.length) ? true : m.dias.includes(new Date(iso+"T12:00:00").getDay());
 
@@ -723,7 +739,15 @@ function formNovoUsuario(){
       await setDoc(doc(db,"usuarios",cred.user.uid),{ nome, email, papel, setor, ativo:true, criadoEm:serverTimestamp() });
       await signOut(auth2);
       audit("usuario_criado", `${nome} (${papel} · ${setor})`);
-      cacheUsuarios=[]; toast("Acesso criado"); irTab("func");
+      let extra="";
+      if(papel==="funcionario" && setor==="Caixa"){
+        await addDoc(collection(db,"modelos"),{ nome:POP_CAIXA_NOME, setor:"Caixa", freq:"diario", limite:"",
+          dias:diasDefault("Caixa"), funcionarioUid:cred.user.uid, funcionarioNome:nome, itens:popCaixaItens(),
+          ativo:true, inicioEm:hojeISO(), criadoEm:serverTimestamp(), atualizadoEm:serverTimestamp() });
+        audit("modelo_criado", `${POP_CAIXA_NOME} → ${nome}`);
+        extra=" + POP do Caixa lançado";
+      }
+      cacheUsuarios=[]; toast("Acesso criado"+extra); irTab("func");
     }catch(e){
       console.error(e);
       toast(e.code==="auth/email-already-in-use"?"Esse e-mail já tem acesso.":"Erro ao criar. Confira os dados.");
@@ -779,6 +803,7 @@ function desenharEditor(users){
         ${[1,2,3,4,5,6,0].map(d=>`<button type="button" class="btn-sm" data-dia="${d}" style="${edM.dias.includes(d)?'border-color:var(--dark);color:var(--ink);font-weight:800':''}">${DIAS_LB[d]}</button>`).join("")}
       </div>
     </div>
+    ${edM.setor==="Caixa" && !edM.itens.length ? `<div style="margin:6px 0 4px"><button class="btn-line" id="em-pop">📋 Carregar POP de abertura do Caixa</button></div>` : ""}
     <h2>Itens (${edM.itens.length})</h2>
     ${edM.itens.map((i,ix)=>`
       <div class="mi-row">
@@ -797,6 +822,7 @@ function desenharEditor(users){
     sync(); desenharEditor(users);
   });
   $("em-setor").onchange=()=>{ edM.dias=diasDefault($("em-setor").value); sync(); desenharEditor(users); };
+  const ep=$("em-pop"); if(ep) ep.onclick=()=>{ sync(); edM.itens=popCaixaItens(); if(!edM.nome.trim()) edM.nome=POP_CAIXA_NOME; desenharEditor(users); };
   $("em-freq").onchange=()=>{ sync(); desenharEditor(users); };
   $("em-add").onclick=()=>{
     const t=prompt("Item (o que fazer):"); if(!t) return;
