@@ -19,6 +19,19 @@ const segundaDe = (iso) => addDias(iso, -((dow(iso) + 6) % 7));
 const fmtBR = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const DIAS_PT = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const valeNoDia = (m, iso) => (!m.dias || !m.dias.length) ? true : m.dias.includes(dow(iso));
+// entregue = TODOS os itens marcados; faltou 1 = não entregue
+const entregue = (i) => !!i && (!!i.concluidoEm || ((i.itens || []).length > 0 && i.itens.every((it) => it.done)));
+const horaFim = (i) => (i && (i.concluidoEm || (i.itens || []).map((it) => it.doneEm || "").sort().pop())) || "";
+const resumoInst = (i, modelo) => ({
+  feitos: i ? i.itens.filter((it) => it.done).length : 0,
+  total: (i ? i.itens : (modelo && modelo.itens) || []).length,
+  faltam: i ? i.itens.filter((it) => !it.done).map((it) => it.t) : null,
+});
+const statusHTML = (l) => l.ok
+  ? `<span style="color:#16A34A;font-weight:700">✓ feita${l.hora ? " às " + esc(l.hora) : ""} (${l.feitos}/${l.total})</span>`
+  : (l.faltam
+      ? `<span style="color:#DC2626;font-weight:700">✗ incompleta — concluiu ${l.feitos} de ${l.total}</span>${l.faltam.length ? `<br><span style="color:#DC2626">Faltou: ${l.faltam.map(esc).join(" · ")}</span>` : ""}`
+      : `<span style="color:#DC2626;font-weight:700">✗ não feita (nem iniciou)</span>`);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 module.exports = async (req, res) => {
@@ -65,10 +78,10 @@ module.exports = async (req, res) => {
       const ontemLinhas = [];
       for (const m of meus.filter((m) => m.freq === "diario" && valeNoDia(m, ontem) && (m.inicioEm || ontem) <= ontem)) {
         const i = instDe(m.id, ontem);
-        ontemLinhas.push({ nome: m.nome, ok: !!(i && i.concluidoEm), hora: i && i.concluidoEm, ncs: i ? i.itens.filter((it) => it.nc) : [] });
+        ontemLinhas.push({ nome: m.nome, ok: entregue(i), hora: horaFim(i), ncs: i ? i.itens.filter((it) => it.nc) : [], ...resumoInst(i, m) });
       }
       for (const x of insts.filter((x) => x.freq === "avulso" && x.funcionarioUid === u.uid && x.periodo === ontem)) {
-        ontemLinhas.push({ nome: x.nome + " (avulsa)", ok: !!x.concluidoEm, hora: x.concluidoEm, ncs: x.itens.filter((it) => it.nc) });
+        ontemLinhas.push({ nome: x.nome + " (avulsa)", ok: entregue(x), hora: horaFim(x), ncs: x.itens.filter((it) => it.nc), ...resumoInst(x) });
       }
 
       if (!hojeDiarios.length && !hojeAvulsas.length && !semanais.length && !ontemLinhas.length) continue;
@@ -89,9 +102,9 @@ module.exports = async (req, res) => {
               ${hojeDiarios.length + hojeAvulsas.length === 0 ? li("Nada lançado pra hoje.") : ""}
             </ul>
             ${semanais.length ? `<h3 style="margin:16px 0 6px">🗓 Da semana (até domingo)</h3>
-            <ul style="padding-left:18px;margin:0">${semanais.map((m) => { const i = instDe(m.id, segHoje); const feito = i && i.concluidoEm; return li(`${esc(m.nome)} — ${feito ? '<span style="color:#16A34A;font-weight:700">✓ concluída</span>' : "em aberto"}`); }).join("")}</ul>` : ""}
+            <ul style="padding-left:18px;margin:0">${semanais.map((m) => { const i = instDe(m.id, segHoje); const feito = entregue(i); return li(`${esc(m.nome)} — ${feito ? '<span style="color:#16A34A;font-weight:700">✓ concluída</span>' : "em aberto"}`); }).join("")}</ul>` : ""}
             ${ontemLinhas.length ? `<h3 style="margin:16px 0 6px">🔁 Como ficou ontem (${fmtBR(ontem)})</h3>
-            <ul style="padding-left:18px;margin:0">${ontemLinhas.map((l) => li(`${esc(l.nome)} — ${l.ok ? `<span style="color:#16A34A;font-weight:700">✓ feita às ${esc(l.hora)}</span>` : '<span style="color:#DC2626;font-weight:700">✗ não concluída</span>'}${l.ncs.length ? `<br><span style="color:#D97706">⚠ ${l.ncs.map((n) => esc(n.t + ": " + n.nc)).join(" · ")}</span>` : ""}`)).join("")}</ul>` : ""}
+            <ul style="padding-left:18px;margin:0">${ontemLinhas.map((l) => li(`${esc(l.nome)} — ${statusHTML(l)}${l.ncs.length ? `<br><span style="color:#D97706">⚠ ${l.ncs.map((n) => esc(n.t + ": " + n.nc)).join(" · ")}</span>` : ""}`)).join("")}</ul>` : ""}
             <p style="margin-top:18px"><a href="https://mahau-checklist.vercel.app" style="background:#101418;color:#fff;text-decoration:none;padding:11px 18px;border-radius:9px;font-weight:700;display:inline-block">Abrir meus checklists</a></p>
           </div>
         </div>`;
@@ -112,10 +125,10 @@ module.exports = async (req, res) => {
       const addLinha = (setor, linha) => (setores[setor] ??= []).push(linha);
       for (const m of modelos.filter((m) => m.freq === "diario" && valeNoDia(m, ontem) && (m.inicioEm || ontem) <= ontem)) {
         const i = instDe(m.id, ontem);
-        addLinha(m.setor, { nome: m.nome, resp: nomeDe(m.funcionarioUid), ok: !!(i && i.concluidoEm), hora: i && i.concluidoEm, ncs: i ? i.itens.filter((it) => it.nc) : [], obs: i && i.obs });
+        addLinha(m.setor, { nome: m.nome, resp: nomeDe(m.funcionarioUid), ok: entregue(i), hora: horaFim(i), ncs: i ? i.itens.filter((it) => it.nc) : [], obs: i && i.obs, ...resumoInst(i, m) });
       }
       for (const x of insts.filter((x) => x.freq === "avulso" && x.periodo === ontem)) {
-        addLinha(x.setor, { nome: x.nome + " (avulsa)", resp: nomeDe(x.funcionarioUid), ok: !!x.concluidoEm, hora: x.concluidoEm, ncs: x.itens.filter((it) => it.nc), obs: x.obs });
+        addLinha(x.setor, { nome: x.nome + " (avulsa)", resp: nomeDe(x.funcionarioUid), ok: entregue(x), hora: horaFim(x), ncs: x.itens.filter((it) => it.nc), obs: x.obs, ...resumoInst(x) });
       }
       const totalOntem = Object.values(setores).flat();
       const feitos = totalOntem.filter((l) => l.ok).length;
@@ -133,7 +146,7 @@ module.exports = async (req, res) => {
             ${Object.keys(setores).sort().map((sn) => `
               <h3 style="margin:14px 0 4px">${esc(sn)}</h3>
               <ul style="padding-left:18px;margin:0">
-                ${setores[sn].map((l) => `<li style="margin:4px 0">${esc(l.nome)} — ${esc(l.resp)} — ${l.ok ? `<span style="color:#16A34A;font-weight:700">✓ ${esc(l.hora)}</span>` : '<span style="color:#DC2626;font-weight:700">✗ não feita</span>'}${l.ncs.length ? `<br><span style="color:#D97706">⚠ ${l.ncs.map((n) => esc(n.t + ": " + n.nc)).join(" · ")}</span>` : ""}${l.obs ? `<br><span style="color:#667085">📝 ${esc(l.obs)}</span>` : ""}</li>`).join("")}
+                ${setores[sn].map((l) => `<li style="margin:4px 0">${esc(l.nome)} — ${esc(l.resp)} — ${statusHTML(l)}${l.ncs.length ? `<br><span style="color:#D97706">⚠ ${l.ncs.map((n) => esc(n.t + ": " + n.nc)).join(" · ")}</span>` : ""}${l.obs ? `<br><span style="color:#667085">📝 ${esc(l.obs)}</span>` : ""}</li>`).join("")}
               </ul>`).join("") || "<p>Nenhum checklist previsto ontem.</p>"}
             <h3 style="margin:16px 0 4px">📋 Roda hoje (${DIAS_PT[dow(hoje)]})</h3>
             <ul style="padding-left:18px;margin:0">${hojeRoda.map((m) => `<li style="margin:4px 0">${esc(m.setor)} · ${esc(m.nome)} — ${esc(nomeDe(m.funcionarioUid))}</li>`).join("") || "<li>Nada previsto.</li>"}</ul>
