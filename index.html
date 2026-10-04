@@ -180,6 +180,9 @@ const firebaseConfig = {
 const SETORES = ["Bar","Limpeza","Salão","Caixa","Portaria","Manutenção","Compras","Financeiro","Gerência"];
 const DIAS_LB = ["dom","seg","ter","qua","qui","sex","sáb"];
 const SETORES_SEG_SEX = ["Manutenção","Compras","Financeiro"];
+const CARGOS = ["Responsável","Barman","Atendente","Hostess"];
+const cargoDe = u => u.cargo || "Responsável";
+const rotuloFunc = u => cargoDe(u)==="Responsável" ? `Resp. ${u.setor}` : `${cargoDe(u)} · ${u.setor}`;
 const POP_CAIXA_NOME = "Abertura do Caixa (POP)";
 const POP_CAIXA = [
   ["Abrir o sistema","Ler a primeira comanda ZIG da noite — o sistema da casa abre automaticamente."],
@@ -304,7 +307,7 @@ function entrarApp(){
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
   $("whoami").classList.remove("hidden");
-  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? "Gerência" : `Resp. ${me.setor}`;
+  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? "Gerência" : rotuloFunc(me);
   $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
   montarTabs();
   irTab(me.papel==="funcionario" ? "minhas" : "painel");
@@ -590,7 +593,7 @@ async function formAvulsa(){
     <button class="back" id="av-back">← Voltar</button>
     <h1 class="disp">Tarefa avulsa</h1>
     <p class="sub">Vai aparecer só pro funcionário escolhido, no dia escolhido.</p>
-    <div class="fld"><label>Funcionário</label><select id="av-func">${users.map(u=>`<option value="${u.uid}">${esc(u.nome)} · ${esc(u.setor)}</option>`).join("")}</select></div>
+    <div class="fld"><label>Funcionário</label><select id="av-func">${users.map(u=>`<option value="${u.uid}">${esc(u.nome)} · ${esc(u.papel==="funcionario"?rotuloFunc(u):"Gerência")}</option>`).join("")}</select></div>
     <div class="fld"><label>Nome da tarefa</label><input id="av-nome" placeholder="Ex.: Trocar refletor do deck"></div>
     <div class="fld"><label>Descrição exata do que fazer</label><textarea id="av-desc" placeholder="Descreva exatamente o que precisa ser feito"></textarea></div>
     <div class="fld"><label>Data</label><input type="date" id="av-data" value="${hojeISO()}"></div>
@@ -642,20 +645,21 @@ async function renderEquipe(){
   const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando equipe…</div>';
   try{
     const users=await getUsuarios();
-    const funcs=users.filter(u=>u.papel==="funcionario");
-    const outros=users.filter(u=>u.papel!=="funcionario");
+    const vivos=users.filter(u=>!u.excluido);
+    const funcs=vivos.filter(u=>u.papel==="funcionario");
+    const outros=vivos.filter(u=>u.papel!=="funcionario");
     c.innerHTML=`
       <h1 class="disp">Equipe</h1>
-      <p class="sub">Toque num responsável para ver o controle diário, semanal e mensal dele.</p>
+      <p class="sub">Toque numa pessoa para ver o controle diário, semanal e mensal dela.</p>
       ${me.papel==="gerencia"?`<button class="btn-line" id="btn-novo-user" style="margin-bottom:16px">+ Novo acesso</button>`:""}
-      <h2>Responsáveis</h2>
+      <h2>Equipe operacional</h2>
       ${funcs.map(u=>`
         <div class="card tap" data-user="${u.uid}">
-          <div class="row"><h3>${esc(u.nome)}</h3><span class="pill ${u.ativo===false?'late':'open'}">${u.ativo===false?'Desativado':esc(u.setor)}</span></div>
+          <div class="row"><h3>${esc(u.nome)}</h3><span class="pill ${u.ativo===false?'late':'open'}">${u.ativo===false?'Desativado':esc(rotuloFunc(u))}</span></div>
           <div class="meta">${esc(u.email||"")}</div>
-        </div>`).join("")||'<p class="sub">Nenhum responsável cadastrado.</p>'}
+        </div>`).join("")||'<p class="sub">Ninguém cadastrado ainda.</p>'}
       <h2>Gestão</h2>
-      ${outros.map(u=>`<div class="card"><div class="row"><h3>${esc(u.nome)}</h3><span class="pill open">${u.papel==="socio"?"Sócio":"Gerência"}</span></div><div class="meta">${esc(u.email||"")}</div></div>`).join("")}
+      ${outros.map(u=>`<div class="card ${me.papel==="gerencia"&&u.uid!==me.uid?'tap':''}" ${me.papel==="gerencia"&&u.uid!==me.uid?`data-user="${u.uid}"`:""}><div class="row"><h3>${esc(u.nome)}</h3><span class="pill ${u.ativo===false?'late':'open'}">${u.ativo===false?'Desativado':(u.papel==="socio"?"Sócio":"Gerência")}</span></div><div class="meta">${esc(u.email||"")}</div></div>`).join("")}
     `;
     c.querySelectorAll("[data-user]").forEach(el=> el.onclick=()=>renderControleFunc(el.dataset.user,"dia"));
     const bn=$("btn-novo-user"); if(bn) bn.onclick=formNovoUsuario;
@@ -694,7 +698,7 @@ async function renderControleFunc(uid, modo){
       <button class="back" id="cf-back">← Equipe</button>
       <div class="eyebrow">${esc(u.setor)} · controle</div>
       <h1 class="disp">${esc(u.nome)}</h1>
-      ${me.papel==="gerencia"?`<div style="margin-top:8px"><button class="btn-sm ${u.ativo===false?'':'danger'}" id="cf-toggle">${u.ativo===false?"Reativar acesso":"Desativar acesso"}</button></div>`:""}
+      ${me.papel==="gerencia"&&uid!==me.uid?`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn-sm ${u.ativo===false?'':'danger'}" id="cf-toggle">${u.ativo===false?"Reativar acesso":"Desativar acesso"}</button><button class="btn-sm danger" id="cf-excluir">🗑 Excluir acesso</button></div>`:""}
       <div class="seg" style="margin-top:12px">
         <button data-m="dia" class="${modo==='dia'?'on':''}">Dia</button>
         <button data-m="semana" class="${modo==='semana'?'on':''}">Semana</button>
@@ -718,6 +722,7 @@ async function renderControleFunc(uid, modo){
     $("cf-back").onclick=()=>irTab("func");
     c.querySelectorAll("[data-m]").forEach(b=> b.onclick=()=>renderControleFunc(uid,b.dataset.m));
     c.querySelectorAll("[data-cexp]").forEach(el=> el.onclick=()=>{ $(el.dataset.cexp).classList.toggle("hidden"); });
+    const cx=$("cf-excluir"); if(cx) cx.onclick=()=>excluirUsuario(u);
     const ct=$("cf-toggle"); if(ct) ct.onclick=async()=>{
       const novo = u.ativo===false;
       if(!confirm(novo?`Reativar o acesso de ${u.nome}?`:`Desativar o acesso de ${u.nome}? A pessoa não consegue mais entrar (o histórico fica guardado).`)) return;
@@ -731,6 +736,21 @@ async function renderControleFunc(uid, modo){
   }catch(e){ console.error(e); c.innerHTML='<p class="sub">Erro ao carregar. Recarregue a página.</p>'; }
 }
 
+/* excluir acesso de vez (gerência) — apaga o login no servidor, histórico continua nos relatórios */
+async function excluirUsuario(u){
+  if(!confirm(`EXCLUIR o acesso de ${u.nome}?\n\nO login é apagado de vez e o e-mail fica livre pra ser usado de novo. Os checklists dela saem da rotina. O histórico passado continua nos relatórios.`)) return;
+  if(!confirm(`Confirma a exclusão de ${u.nome}? Não dá pra desfazer.`)) return;
+  try{
+    const token=await auth.currentUser.getIdToken();
+    const r=await fetch("/api/excluir-usuario",{ method:"POST",
+      headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
+      body:JSON.stringify({ uid:u.uid }) });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.erro||("HTTP "+r.status));
+    cacheUsuarios=[]; toast("Acesso excluído"); irTab("func");
+  }catch(e){ console.error(e); toast("Não deu pra excluir: "+(e.message||e)); }
+}
+
 /* novo acesso (gerência) */
 function formNovoUsuario(){
   const c=$("tab-content");
@@ -742,7 +762,10 @@ function formNovoUsuario(){
     <div class="fld"><label>E-mail (login)</label><input type="email" id="nu-email" placeholder="email@exemplo.com"></div>
     <div class="fld"><label>Senha inicial (mín. 6)</label><input id="nu-senha" placeholder="Senha que você vai passar pra pessoa"></div>
     <div class="fld"><label>Papel</label><select id="nu-papel">
-      <option value="funcionario">Responsável de setor</option>
+      <option value="funcionario|Responsável">Responsável de setor</option>
+      <option value="funcionario|Barman">Barman</option>
+      <option value="funcionario|Atendente">Atendente</option>
+      <option value="funcionario|Hostess">Hostess</option>
       <option value="gerencia">Gerência</option>
       <option value="socio">Sócio (só visualiza)</option>
     </select></div>
@@ -752,7 +775,8 @@ function formNovoUsuario(){
   $("nu-back").onclick=()=>irTab("func");
   $("nu-salvar").onclick=async()=>{
     const nome=$("nu-nome").value.trim(), email=$("nu-email").value.trim(),
-          senha=$("nu-senha").value, papel=$("nu-papel").value, setor=$("nu-setor").value;
+          senha=$("nu-senha").value, setor=$("nu-setor").value;
+    const [papel, cargo] = $("nu-papel").value.split("|");
     if(!nome||!email||senha.length<6){ toast("Preencha nome, e-mail e senha (mín. 6)."); return; }
     $("nu-salvar").disabled=true;
     let app2=null;
@@ -760,9 +784,9 @@ function formNovoUsuario(){
       app2=initializeApp(firebaseConfig,"criar-"+Date.now());
       const auth2=getAuth(app2);
       const cred=await createUserWithEmailAndPassword(auth2,email,senha);
-      await setDoc(doc(db,"usuarios",cred.user.uid),{ nome, email, papel, setor, ativo:true, criadoEm:serverTimestamp() });
+      await setDoc(doc(db,"usuarios",cred.user.uid),{ nome, email, papel, setor, ...(cargo?{cargo}:{}), ativo:true, criadoEm:serverTimestamp() });
       await signOut(auth2);
-      audit("usuario_criado", `${nome} (${papel} · ${setor})`);
+      audit("usuario_criado", `${nome} (${cargo||papel} · ${setor})`);
       let extra="";
       if(papel==="funcionario" && setor==="Caixa"){
         await addDoc(collection(db,"modelos"),{ nome:POP_CAIXA_NOME, setor:"Caixa", freq:"diario", limite:"",
@@ -817,7 +841,7 @@ function desenharEditor(users){
     <h1 class="disp">${novo?"Novo modelo":"Editar modelo"}</h1>
     <div class="fld"><label>Nome do checklist</label><input id="em-nome" value="${esc(edM.nome)}" placeholder="Ex.: Abertura do bar"></div>
     <div class="fld"><label>Setor</label><select id="em-setor">${SETORES.map(s=>`<option ${s===edM.setor?"selected":""}>${s}</option>`).join("")}</select></div>
-    <div class="fld"><label>Responsável</label><select id="em-func">${users.map(u=>`<option value="${u.uid}" ${u.uid===edM.funcionarioUid?"selected":""}>${esc(u.nome)} · ${esc(u.setor)}</option>`).join("")}</select></div>
+    <div class="fld"><label>Responsável</label><select id="em-func">${users.map(u=>`<option value="${u.uid}" ${u.uid===edM.funcionarioUid?"selected":""}>${esc(u.nome)} · ${esc(u.papel==="funcionario"?rotuloFunc(u):"Gerência")}</option>`).join("")}</select></div>
     <div class="fld"><label>Frequência</label><select id="em-freq">
       <option value="diario" ${edM.freq==="diario"?"selected":""}>Diário</option>
       <option value="semanal" ${edM.freq==="semanal"?"selected":""}>Semanal</option>
