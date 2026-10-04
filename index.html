@@ -307,7 +307,7 @@ function entrarApp(){
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
   $("whoami").classList.remove("hidden");
-  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? "Gerência" : rotuloFunc(me);
+  $("whoname").textContent = me.papel==="socio" ? "Sócio" : me.papel==="gerencia" ? "Gerência" : "";
   $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
   montarTabs();
   irTab(me.papel==="funcionario" ? "minhas" : "painel");
