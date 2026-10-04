@@ -213,20 +213,60 @@ const POP_PORTARIA_ABRE = [
   ["Pegar rádios (HT) da portaria",""],
   ["Separar itens da segurança","Lata, HT, Palm e listagem."]
 ];
-const popPortariaAbreItens = () => POP_PORTARIA_ABRE.map(([t,d],i)=>({id:"pab"+(i+1), t, desc:d}));
+const POP_PONTO_PORTARIA = {id:"pab0", t:"Bater o ponto", desc:"Registrar o ponto de entrada antes de começar a abertura.", desde:2};
+const popPortariaAbreItens = () => [ {...POP_PONTO_PORTARIA}, ...POP_PORTARIA_ABRE.map(([t,d],i)=>({id:"pab"+(i+1), t, desc:d})) ];
+
+const POP_PORTARIA_FECHA_NOME = "Fecha · Portaria (POP)";
+const POP_PORTARIA_FECHA = [
+  ["Tirar itens de debaixo da mesa",""],
+  ["Recolher as comandas da saída",""],
+  ["Reorganizar comandas",""],
+  ["Reorganizar pulseiras",""],
+  ["Colocar os HT pra carregar",""],
+  ["Bater o caixa da portaria",""],
+  ["Lista de presença dos promoters",""],
+  ["Fazer camarotes",""],
+  ["Bater o ponto (saída)","Registrar o ponto de saída no fim do turno."]
+];
+const popPortariaFechaItens = () => POP_PORTARIA_FECHA.map(([t,d],i)=>({id:"pfe"+(i+1), t, desc:d}));
 
 /* POPs pré-programados: quem é do setor já nasce com eles (e quem já existe recebe quando a gerência entra) */
 const POPS = [
-  { setor:"Caixa",    nome:POP_CAIXA_NOME,         legado:[POP_CAIXA_LEGADO], turno:"abre", itens:popCaixaItens },
-  { setor:"Portaria", nome:POP_PORTARIA_ABRE_NOME, legado:[],                 turno:"abre", itens:popPortariaAbreItens },
+  { setor:"Caixa",    nome:POP_CAIXA_NOME,          legado:[POP_CAIXA_LEGADO], turno:"abre",  ver:1, itens:popCaixaItens },
+  { setor:"Portaria", nome:POP_PORTARIA_ABRE_NOME,  legado:[],                 turno:"abre",  ver:2, itens:popPortariaAbreItens },
+  { setor:"Portaria", nome:POP_PORTARIA_FECHA_NOME, legado:[],                 turno:"fecha", ver:1, itens:popPortariaFechaItens },
 ];
+const limparItem = ({desde, ...i}) => i;
 const TURNO_ORD = { abre:0, fecha:1 };
 const ordTurno = x => (x.turno in TURNO_ORD) ? TURNO_ORD[x.turno] : 2;
 async function criarPop(pop, uid, nome){
   await addDoc(collection(db,"modelos"),{ nome:pop.nome, setor:pop.setor, freq:"diario", limite:"", turno:pop.turno,
-    dias:diasDefault(pop.setor), funcionarioUid:uid, funcionarioNome:nome, itens:pop.itens(),
+    dias:diasDefault(pop.setor), funcionarioUid:uid, funcionarioNome:nome, itens:pop.itens().map(limparItem), popVer:pop.ver,
     ativo:true, inicioEm:hojeISO(), criadoEm:serverTimestamp(), atualizadoEm:serverTimestamp() });
   audit("modelo_criado", `${pop.nome} → ${nome}`);
+}
+async function atualizarPops(){
+  try{
+    const qs=await getDocs(collection(db,"modelos"));
+    for(const d of qs.docs){
+      const m=d.data();
+      if(m.ativo===false) continue;
+      const pop=POPS.find(p=>p.nome===m.nome);
+      if(!pop || (m.popVer||1)>=pop.ver) continue;
+      const tpl=pop.itens(); let itens=[...(m.itens||[])], add=[];
+      tpl.forEach((ti,ix)=>{
+        if((ti.desde||1)<=(m.popVer||1) || itens.some(i=>i.id===ti.id)) return;
+        let pos=-1;
+        for(let k=ix-1;k>=0 && pos<0;k--) pos=itens.findIndex(i=>i.id===tpl[k].id);
+        itens.splice(pos+1,0,limparItem(ti)); add.push(ti.t);
+      });
+      await updateDoc(doc(db,"modelos",d.id),{ itens, popVer:pop.ver, atualizadoEm:serverTimestamp() });
+      if(add.length){
+        await syncInstanciasAbertas(d.id,{ itens, nome:m.nome, turno:m.turno });
+        audit("modelo_editado", `${m.nome}: + ${add.join(", ")}`);
+      }
+    }
+  }catch(e){ console.error("atualizarPops", e); }
 }
 async function garantirPops(){
   try{
@@ -367,7 +407,7 @@ function entrarApp(){
   $("ro-banner").classList.toggle("hidden", me.papel!=="socio");
   montarTabs();
   irTab(me.papel==="funcionario" ? "minhas" : "painel");
-  if(me.papel==="gerencia") migrarPopCaixa().then(garantirPops);
+  if(me.papel==="gerencia") migrarPopCaixa().then(atualizarPops).then(garantirPops);
 }
 
 /* ---------- tabs ---------- */
@@ -1020,7 +1060,7 @@ function desenharEditor(users){
     sync(); desenharEditor(users);
   });
   $("em-setor").onchange=()=>{ edM.dias=diasDefault($("em-setor").value); sync(); desenharEditor(users); };
-  c.querySelectorAll("[data-pop]").forEach(b=> b.onclick=()=>{ sync(); const p=POPS[+b.dataset.pop]; edM.itens=p.itens(); edM.turno=p.turno; if(!edM.nome.trim()) edM.nome=p.nome; desenharEditor(users); });
+  c.querySelectorAll("[data-pop]").forEach(b=> b.onclick=()=>{ sync(); const p=POPS[+b.dataset.pop]; edM.itens=p.itens().map(limparItem); edM.turno=p.turno; if(!edM.nome.trim()) edM.nome=p.nome; desenharEditor(users); });
   $("em-freq").onchange=()=>{ sync(); desenharEditor(users); };
   $("em-add").onclick=()=>{
     const t=prompt("Item (o que fazer):"); if(!t) return;
