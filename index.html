@@ -229,7 +229,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pad = n => String(n).padStart(2,"0");
 const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const hojeISO = () => isoDate(new Date());
+const agoraOp = () => new Date(Date.now() - 8*3600*1000);   // dia operacional: vira às 08h
+const hojeISO = () => isoDate(agoraOp());
 function segundaDe(d){ const x=new Date(d); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); return x; }
 const semanaKey = d => isoDate(segundaDe(d));
 function addDias(iso,n){ const d=new Date(iso+"T12:00:00"); d.setDate(d.getDate()+n); return isoDate(d); }
@@ -371,7 +372,7 @@ function podeEditar(x){
 }
 function periodoEncerrado(c){
   const hoje=hojeISO();
-  if(c.freq==="semanal") return semanaKey(new Date()) > c.periodo;
+  if(c.freq==="semanal") return semanaKey(agoraOp()) > c.periodo;
   return c.periodo < hoje; // diário e avulso
 }
 function statusInst(c){
@@ -389,7 +390,7 @@ function pillInst(c){
 /* gera as instâncias do funcionário logado (hoje + semana atual) */
 async function gerarMinhasInstancias(){
   const modelos = await getModelosAtivos(me.uid);
-  const hoje=hojeISO(), seg=semanaKey(new Date());
+  const hoje=hojeISO(), seg=semanaKey(agoraOp());
   for(const m of modelos){
     if(m.freq==="diario" && !modeloValeNoDia(m,hoje)) continue;
     const periodo = m.freq==="semanal" ? seg : hoje;
@@ -414,7 +415,7 @@ async function renderMinhas(){
   const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando suas tarefas…</div>';
   try{
     await gerarMinhasInstancias();
-    const hoje=hojeISO(), seg=semanaKey(new Date());
+    const hoje=hojeISO(), seg=semanaKey(agoraOp());
     const todas = await getChecklists({funcionarioUid: me.uid});
     const doDia    = todas.filter(x=>x.freq!=="semanal" && x.periodo===hoje);
     const daSemana = todas.filter(x=>x.freq==="semanal" && x.periodo===seg);
@@ -429,7 +430,7 @@ async function renderMinhas(){
 
     c.innerHTML = `
       <div class="eyebrow">${esc(me.setor)} · ${esc(me.nome)}</div>
-      <h1 class="disp">Hoje · ${DIAS_PT[new Date().getDay()]} ${fmtBR(hoje)}</h1>
+      <h1 class="disp">Hoje · ${DIAS_PT[agoraOp().getDay()]} ${fmtBR(hoje)}</h1>
       <p class="sub">Toque numa tarefa para preencher.</p>
       ${atrasadas.length?`<h2>⚠ Atrasadas</h2>${bloco(atrasadas)}`:""}
       <h2>Do dia</h2>${bloco(doDia)}
@@ -518,7 +519,7 @@ async function concluirExec(){
 async function renderPainel(){
   const c=$("tab-content"); c.innerHTML='<div class="loading">Carregando painel…</div>';
   try{
-    const hoje=hojeISO(), seg=semanaKey(new Date());
+    const hoje=hojeISO(), seg=semanaKey(agoraOp());
     const [modelos, users, doDia, daSemana] = await Promise.all([
       getModelosAtivos(), getUsuarios(),
       getChecklists({periodo:hoje}), getChecklists({periodo:seg})
@@ -560,7 +561,7 @@ async function renderPainel(){
 
     c.innerHTML=`
       <div class="eyebrow">${me.papel==="socio"?"Sócio":"Gerência"}</div>
-      <h1 class="disp">Painel · ${DIAS_PT[new Date().getDay()]} ${fmtBR(hoje)}</h1>
+      <h1 class="disp">Painel · ${DIAS_PT[agoraOp().getDay()]} ${fmtBR(hoje)}</h1>
       <p class="sub">Visão em tempo real de todos os setores.</p>
       <div class="stats">
         <div class="stat ok"><b>${oks}</b><span>Concluídos</span></div>
@@ -668,7 +669,7 @@ async function renderControleFunc(uid, modo){
     const users=await getUsuarios(); const u=users.find(x=>x.uid===uid);
     const todas=await getChecklists({funcionarioUid:uid});
     const modelos=await getModelosAtivos(uid);
-    const hoje=hojeISO(), seg=semanaKey(new Date()), mes=hoje.slice(0,7);
+    const hoje=hojeISO(), seg=semanaKey(agoraOp()), mes=hoje.slice(0,7);
 
     let lista=[], titulo="";
     if(modo==="dia"){ titulo=`Hoje · ${fmtBR(hoje)}`;
@@ -885,7 +886,7 @@ function desenharEditor(users){
 /* ================== RELATÓRIO (dia / semana / mês) ================== */
 let repTipo="dia";
 let repDia=hojeISO();
-let repSem=semanaKey(new Date());
+let repSem=semanaKey(agoraOp());
 let repMes=hojeISO().slice(0,7);
 
 function renderRelatorio(){ repTipo==="dia"?renderRelatorioDia():repTipo==="sem"?renderRelatorioSem():renderRelatorioMes(); }
