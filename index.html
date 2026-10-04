@@ -221,6 +221,7 @@ async function migrarPopCaixa(){
       }
       if(!mudou.length) continue;
       await updateDoc(doc(db,"modelos",d.id),{ itens, atualizadoEm:serverTimestamp() });
+      await syncInstanciasAbertas(d.id, itens);
       audit("modelo_editado", `${POP_CAIXA_NOME}: + ${mudou.join(", ")}`);
     }
   }catch(e){ console.error("migrarPopCaixa", e); }
@@ -401,6 +402,33 @@ function pillInst(c){
 }
 
 /* gera as instâncias do funcionário logado (hoje + semana atual) */
+/* junta itens do checklist em andamento com o modelo atual, sem perder checks já feitos */
+function mesclarItens(instItens, modeloItens){
+  const atual={}; (instItens||[]).forEach(i=>{ atual[i.id]=i; });
+  const novos=(modeloItens||[]).map(mi=> atual[mi.id]
+    ? {...atual[mi.id], t:mi.t, desc:mi.desc||""}
+    : {id:mi.id, t:mi.t, desc:mi.desc||"", done:false, doneEm:null, nc:null});
+  const ids=new Set(novos.map(i=>i.id));
+  // item que saiu do modelo mas já foi marcado ou teve problema relatado continua (histórico)
+  (instItens||[]).forEach(i=>{ if(!ids.has(i.id) && (i.done || i.nc)) novos.push(i); });
+  return novos;
+}
+const mudouItens=(a,b)=>JSON.stringify(a)!==JSON.stringify(b);
+const aindaAberto=x=> !x.concluidoEm && (!x.editavelAte || !x.editavelAte.toDate || x.editavelAte.toDate()>new Date());
+
+/* gerência: aplica o modelo editado nos checklists em andamento */
+async function syncInstanciasAbertas(modeloId, itensModelo){
+  try{
+    const qs=await getDocs(query(collection(db,"checklists"), where("modeloId","==",modeloId)));
+    for(const d of qs.docs){
+      const x=d.data();
+      if(!aindaAberto(x)) continue;
+      const novos=mesclarItens(x.itens, itensModelo);
+      if(mudouItens(novos,x.itens)) await updateDoc(doc(db,"checklists",d.id),{ itens:novos });
+    }
+  }catch(e){ console.error("syncInstanciasAbertas", e); }
+}
+
 async function gerarMinhasInstancias(){
   const modelos = await getModelosAtivos(me.uid);
   const hoje=hojeISO(), seg=semanaKey(agoraOp());
@@ -419,6 +447,12 @@ async function gerarMinhasInstancias(){
         itens: (m.itens||[]).map(i=>({id:i.id, t:i.t, desc:i.desc||"", done:false, doneEm:null, nc:null})),
         criadoEm: serverTimestamp()
       });
+    }else{
+      const x=snap.data();
+      if(aindaAberto(x)){
+        const novos=mesclarItens(x.itens, m.itens);
+        if(mudouItens(novos,x.itens)){ try{ await updateDoc(ref,{ itens:novos }); }catch(e){ console.error(e); } }
+      }
     }
   }
 }
@@ -905,7 +939,7 @@ function desenharEditor(users){
       dias:edM.dias, funcionarioUid:edM.funcionarioUid, funcionarioNome:u?.nome||"", itens:edM.itens, ativo:true,
       inicioEm: edM.inicioEm || hojeISO(), atualizadoEm:serverTimestamp() };
     try{
-      if(edM.id){ await updateDoc(doc(db,"modelos",edM.id),dados); audit("modelo_editado",edM.nome); }
+      if(edM.id){ await updateDoc(doc(db,"modelos",edM.id),dados); audit("modelo_editado",edM.nome); await syncInstanciasAbertas(edM.id, dados.itens); }
       else{ await addDoc(collection(db,"modelos"),{...dados,criadoEm:serverTimestamp()}); audit("modelo_criado",edM.nome); }
       toast("Modelo salvo"); irTab("modelos");
     }catch(e){ console.error(e); toast("Erro ao salvar. Tente de novo."); }
